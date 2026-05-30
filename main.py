@@ -1,5 +1,5 @@
 
-from fastapi import FastAPI, Depends, Request
+from fastapi import FastAPI, Depends, Request, Form, Response, Cookie
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -63,35 +63,53 @@ from fastapi.responses import RedirectResponse
 
 @app.post("/login")
 def login(
+    request: Request, # <-- Added to allow template reloading
+    response: Response,
     role: str = Form(...),
     email: str = Form(...),
-    password: str = Form(...)
+    password: str = Form(...),
+    db: Session = Depends(get_db)
 ):
-    
-    # Hackathon demo credentials
-
-    if role == "employee":
-        return RedirectResponse(
-            url="/employee-dashboard",
-            status_code=303
-        )
-
     if role == "admin":
-        return RedirectResponse(
-            url="/admin-dashboard",
-            status_code=303
+        return RedirectResponse(url="/admin-dashboard", status_code=303)
+
+    # Search for the user in the database
+    user = db.query(Employee).filter(Employee.email == email).first()
+    
+    if not user or user.password != password:
+        # THE FIX: Return the HTML page with an error flag instead of raw JSON
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={"error": "Invalid email or password. Please try again."}
         )
 
-    return {"error": "Invalid login"}
+    # Redirect to dashboard AND set a browser cookie with their ID
+    redirect = RedirectResponse(url="/employee-dashboard", status_code=303)
+    redirect.set_cookie(key="session_emp_id", value=user.employee_id)
+    return redirect
 
 
+from typing import Optional
 
 @app.get("/employee-dashboard")
-def employee_dashboard(request: Request):
+def employee_dashboard(
+    request: Request, 
+    session_emp_id: Optional[str] = Cookie(None), # Grab the cookie
+    db: Session = Depends(get_db)
+):
+    # If they have no cookie, kick them back to the login page
+    if not session_emp_id:
+        return RedirectResponse(url="/")
+        
+    # Get their specific data
+    user = db.query(Employee).filter(Employee.employee_id == session_emp_id).first()
+    
+    # Pass the user data into the HTML template
     return templates.TemplateResponse(
         request=request,
         name="employee_dashboard.html",
-        context={}
+        context={"user": user} # This is the magic link to the HTML
     )
 
 
@@ -320,13 +338,40 @@ def trigger_manual_scan(db: Session = Depends(get_db)):
 
 
 
-from database import Finding # Ensure this is imported at the top if it isn't already
+from database import Employee, FileMetadata, Finding
 
 @app.post("/api/admin/seed-dummy-data")
 def seed_dummy_data(db: Session = Depends(get_db)):
-    # Inject a fake GDPR violation so the frontend has something to display
+    """Here is where you plug in your new sample data!"""
+    
+    # 1. Plug your sample user data here
+    user = db.query(Employee).filter(Employee.email == "john.doe@company.com").first()
+    if not user:
+        user = Employee(
+            employee_id="BX-1001",
+            email="john.doe@company.com",
+            first_name="John",
+            last_name="Doe",
+            password="password123",
+            department="Engineering",
+            location="Heilbronn"
+        )
+        db.add(user)
+        db.commit()
+
+    # 2. Plug your sample files here and assign them to the user
+    dummy_file = FileMetadata(
+        file_path="/simulated_drive/john_doe_passport.pdf",
+        owner_employee_id="BX-1001",
+        size_bytes=1024500,
+        file_hash="dummyhash123",
+    )
+    db.add(dummy_file)
+    db.commit()
+
+    # 3. Add the GDPR Finding
     dummy_finding = Finding(
-        file_id=2, # Tying it to test2.txt
+        file_id=dummy_file.id,
         category="Passport Number",
         confidence_score=0.98,
         flagged_snippet="L9923481X",

@@ -11,6 +11,19 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# Add this class to database.py
+class Employee(Base):
+    __tablename__ = "employees"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    first_name = Column(String)
+    last_name = Column(String)
+    password = Column(String) # Plaintext is fine for a hackathon!
+    department = Column(String)
+    location = Column(String)
+
 class FileMetadata(Base):
     __tablename__ = "files"
     

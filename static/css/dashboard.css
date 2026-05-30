@@ -6,7 +6,9 @@ font-family:"Segoe UI",sans-serif;
 }
 
 html{
-scroll-behavior:smooth;
+    scroll-behavior: smooth;
+    scroll-padding-top: 100px; /* NEW: Keeps sections from hiding under the topbar */
+
 }
 
 body{
@@ -94,25 +96,45 @@ z-index:1000;
 
 }
 
-.topbar::before{
+.topbar::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 6px;
+    background: linear-gradient(
+        90deg, 
+        /* RED (Dark, Base, Light) */
+        #A3000F 0%, #A3000F 5.55%,
+        #E20015 5.55%, #E20015 11.11%,
+        #FF3347 11.11%, #FF3347 16.66%,
 
-content:"";
+        /* PURPLE (Dark, Base, Light) */
+        #7A1964 16.66%, #7A1964 22.22%,
+        #A62288 22.22%, #A62288 27.77%,
+        #C84FB0 27.77%, #C84FB0 33.33%,
 
-position:absolute;
+        /* DARK BLUE (Dark, Base, Light) */
+        #003E69 33.33%, #003E69 38.88%,
+        #005691 38.88%, #005691 44.44%,
+        #1A7DBF 44.44%, #1A7DBF 50.00%,
 
-top:0;
-left:0;
+        /* LIGHT BLUE (Dark, Base, Light) */
+        #007D96 50.00%, #007D96 55.55%,
+        #00A8CB 55.55%, #00A8CB 61.11%,
+        #33C9E8 61.11%, #33C9E8 66.66%,
 
-width:100%;
-height:4px;
+        /* DARK GREEN (Dark, Base, Light) */
+        #006336 66.66%, #006336 72.22%,
+        #00884A 72.22%, #00884A 77.77%,
+        #1EA864 77.77%, #1EA864 83.33%,
 
-background:
-linear-gradient(
-90deg,
-#ea0016,
-#007bc0
-);
-
+        /* LIGHT GREEN (Dark, Base, Light) */
+        #3A8A34 83.33%, #3A8A34 88.88%,
+        #50B848 88.88%, #50B848 94.44%,
+        #78D171 94.44%, #78D171 100%
+    );
 }
 
 .left-top{
@@ -282,103 +304,99 @@ background:#f4f6f8;
 }
 
 /* SIDEBAR */
-.sidebar{
-    position:fixed;
-    top:65px;
-    left:0;
-    width:230px;
-    height:calc(100vh - 65px);
-
-    background:rgba(255,255,255,0.75);
-    backdrop-filter:blur(18px);
-
-    border-right:1px solid rgba(0,0,0,0.06);
-
-    display:flex;
-    flex-direction:column;
-
-    padding:30px 20px;
-
-    transition:all .35s ease;
-
-    z-index:100;
+CSS
+/* --- STRICT SIDEBAR CONTAINER --- */
+.sidebar {
+    position: fixed;
+    top: 72px; 
+    left: 0;
+    bottom: 0; /* Forces it to stay vertical to the bottom */
+    width: 250px;
+    background: #ffffff;
+    border-right: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    padding: 24px 16px;
+    z-index: 100;
+    
+    /* Smooth bezier curve for snapping open/closed */
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s ease;
+    overflow-x: hidden;
+    white-space: nowrap; /* CRITICAL: Stops it from extending across the page */
 }
 
-.sidebar.collapsed{
-    width:75px;
+/* --- COLLAPSED STATE --- */
+.sidebar.collapsed {
+    width: 76px; /* Shrinks to icon width */
+    padding: 24px 12px;
 }
 
-.sidebar a{
-    color:#444;
-    text-decoration:none;
-
-    padding:14px 16px;
-    margin-bottom:8px;
-
-    border-radius:12px;
-
-    font-weight:500;
-
-    transition:all .25s ease;
+.sidebar.collapsed .label {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease;
 }
 
-.sidebar a:hover{
-    background:rgba(233,0,41,0.08);
-
-    color:#E2001A;
-
-    transform:translateX(5px);
+/* --- SIDEBAR LINKS (MINIMAL STATE) --- */
+.sidebar a {
+    display: flex;
+    align-items: center;
+    gap: 16px; /* Spacing between icon and text */
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    color: #4b5563; 
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 500;
+    background: transparent;
+    border-left: 3px solid transparent; /* Hidden border for active state */
+    transition: all 0.2s ease;
+    cursor: pointer;
 }
 
-.sidebar.collapsed a{
-
-    width:40px;
-    height:40px;
-
-    padding:0;
-
-    margin:8px auto;
-
-    display:flex;
-    align-items:center;
-    justify-content:center;
-
-    font-size:0;
-
+.sidebar a svg {
+    min-width: 20px; /* Prevents icons from squishing */
+    opacity: 0.7;
+    transition: all 0.2s ease;
 }
 
-.sidebar a.active{
-    background:rgba(226,0,26,0.12);
-
-    color:#E2001A;
-
-    font-weight:600;
+/* --- HOVER EFFECT (Slide & Gray) --- */
+.sidebar a:hover {
+    background: #f3f4f6;
+    color: #1f2937;
+    transform: translateX(4px); /* Satisfying slight slide to the right */
 }
 
-.sidebar a{
-
-    display:flex;
-    align-items:center;
-    gap:12px;
-
+/* --- CLICK EFFECT (Shrink bounce) --- */
+.sidebar a:active {
+    transform: scale(0.97); 
 }
 
-
-.sidebar.collapsed .label{
-    display:none;
+/* --- ACTIVE SECTION HIGHLIGHT --- */
+.sidebar a.active {
+    background: #fff0f1; /* Ultra-light Bosch Red */
+    color: #E20015;
+    font-weight: 600;
+    border-left: 3px solid #E20015; /* Red indicator bar */
+    transform: translateX(0); /* Resets hover slide */
 }
 
-/* MAIN */
-
-.main{
-    margin-left:230px;
-
-    transition:all .35s ease;
+.sidebar a.active svg {
+    opacity: 1;
+    stroke: #E20015;
 }
 
-.main.expanded{
-    margin-left:90px;
+/* --- MAIN CONTENT CONTAINER --- */
+.main {
+    margin-left: 250px;
+    padding: 30px 40px;
+    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+.main.expanded {
+    margin-left: 76px; /* Matches the collapsed sidebar width */
+}
+
 
 .hero{
 
