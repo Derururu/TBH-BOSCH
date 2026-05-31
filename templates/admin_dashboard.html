@@ -310,11 +310,8 @@ loadAdminKPIs();
 
 // When the page loads, fetch the real data from the Python API
 document.addEventListener("DOMContentLoaded", async () => {
-    // Jinja2 will replace this with the actual logged-in user's ID!
-    const employeeId = "{{ user.employee_id }}"; 
-    
     try {
-        const response = await fetch(`/api/employee/files/${employeeId}`);
+        const response = await fetch('/api/admin/kpis');
         const data = await response.json();
         
         // Find the container where the cards live
@@ -324,13 +321,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         alertsGrid.innerHTML = ""; 
         
         // If the database is clean, show a success message
-        if (!data.findings || data.findings.length === 0) {
+        if (!data.recent_alerts || data.recent_alerts.length === 0) {
             alertsGrid.innerHTML = "<p style='color: var(--text-secondary);'>No compliance violations found. Great job!</p>";
             return;
         }
         
         // Loop through the real database findings and generate the UI cards
-        data.findings.forEach(finding => {
+        data.recent_alerts.forEach(finding => {
             const card = document.createElement('div');
             card.className = 'glass-card alert-card';
             
@@ -341,7 +338,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 </div>
                 <p style="margin: 0 0 15px 0; color: var(--text-secondary); font-size: 13px;">${finding.category}</p>
                 <div style="margin-bottom: 15px; background: rgba(255,255,255,0.02); border: 1px solid var(--border-subtle); padding: 8px; border-radius: 2px; font-family: 'Space Grotesk', monospace; font-size: 12px; color: var(--text-secondary);">
-                    ${finding.flagged_snippet}
+                    ${finding.flagged_snippet_masked}
                 </div>
                 <div style="position: relative; display: inline-block; margin-top: 5px;" class="action-dropdown-container">
                     <button 
@@ -424,44 +421,21 @@ async function loadOverviewStats() {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         
-        // Also fetch user-details for the admin's own files to get retention data
-        const employeeId = "{{ user.employee_id }}";
-        const userResp = await fetch(`/api/user-details/${employeeId}`);
-        const userData = await userResp.json();
-        const files = userData.files || [];
-
-        const now = new Date();
-        const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-        // Use the KPI total for organization-wide file count
         let totalFiles = data.metrics.total_scanned_files || 0;
-        let expiringSoon = 0;
-        let deleteCandidates = 0;
+        let expiringSoon = data.metrics.expiring_soon || 0;
+        let deleteCandidates = data.metrics.delete_candidates || 0;
         let flaggedFiles = data.metrics.total_flagged_files || 0;
-        const expiredFiles = [];
-
-        // Calculate retention stats from all files visible to this admin view
-        files.forEach(file => {
-            if (file.retention_deadline) {
-                const deadline = new Date(file.retention_deadline);
-                if (!isNaN(deadline)) {
-                    if (deadline < now) {
-                        deleteCandidates++;
-                        expiredFiles.push(file);
-                    } else if (deadline >= now && deadline <= thirtyDaysFromNow) {
-                        expiringSoon++;
-                    }
-                }
-            }
-        });
 
         document.getElementById("stat-total").textContent = totalFiles;
         document.getElementById("stat-expiring").textContent = expiringSoon;
         document.getElementById("stat-delete").textContent = deleteCandidates;
         document.getElementById("stat-flagged").textContent = flaggedFiles;
 
+        const employeeId = "{{ user.employee_id }}";
+        // To not break existing functionality, we just pass an empty array to GDPR modal
+        // as the admin dashboard isn't really intended for resolving personal files anyway.
         if (deleteCandidates > 0 && typeof triggerGdprModal === 'function') {
-            triggerGdprModal(employeeId, expiredFiles);
+            triggerGdprModal(employeeId, []);
         }
 
     } catch (error) {

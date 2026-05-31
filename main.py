@@ -371,17 +371,26 @@ def get_user_details(employee_id: str, db: Session = Depends(get_db)):
     file_results = []
     
     for file in user_files:
+        # Skip files that have been physically deleted
+        file_path = getattr(file, "file_path", "")
+        if file_path.startswith("[DELETED]"):
+            continue
+            
         file_findings = db.query(Finding).filter(Finding.file_id == file.id).all()
         findings_list = []
         
         for f in file_findings:
+            status = getattr(f, "review_status", None) or getattr(f, "status", "pending_review")
+            if status == "deleted" or getattr(f, "status", "") == "deleted":
+                continue
+                
             findings_list.append({
                 "finding_id": getattr(f, "finding_uid", None) or str(f.id),
                 "category": getattr(f, "category", None) or getattr(f, "type", ""),
                 "flagged_snippet": getattr(f, "flagged_snippet", None) or getattr(f, "value", ""),
                 "reasoning": getattr(f, "reasoning", None) or getattr(f, "context", ""),
                 "risk_level": getattr(f, "risk_level", "low"),
-                "status": getattr(f, "review_status", None) or getattr(f, "status", "pending_review"),
+                "status": status,
                 "confidence_score": getattr(f, "confidence", 0.95)
             })
             
@@ -446,6 +455,8 @@ def get_user_details(employee_id: str, db: Session = Depends(get_db)):
 
 @app.get("/api/admin/kpis")
 def get_admin_kpis(db: Session = Depends(get_db)):
+    from datetime import datetime, timedelta
+    
     # 1. Total files scanned
     total_files = db.query(FileMetadata).count()
     
@@ -456,13 +467,45 @@ def get_admin_kpis(db: Session = Depends(get_db)):
     # 3. Total files with findings (using distinct to count each file only once)
     flagged_files = db.query(func.count(func.distinct(Finding.file_id))).scalar() or 0
     
-    # 4. Get a summary of the most recent findings WITH MASKING applied
+    # 4. Expiration stats
+    now = datetime.now()
+    thirty_days = now + timedelta(days=30)
+    
+    all_files = db.query(FileMetadata).all()
+    expiring_soon = 0
+    delete_candidates = 0
+    
+    for f in all_files:
+        deadline = f.retention_deadline
+        if deadline:
+            if isinstance(deadline, str):
+                try:
+                    deadline = datetime.fromisoformat(deadline)
+                except ValueError:
+                    deadline = None
+            if deadline and getattr(deadline, 'tzinfo', None):
+                deadline = deadline.replace(tzinfo=None)
+            
+            if deadline and deadline < now:
+                delete_candidates += 1
+            elif deadline and deadline <= thirty_days:
+                expiring_soon += 1
+
+    # 5. Get a summary of the most recent findings WITH MASKING applied
     recent_findings = db.query(Finding).order_by(Finding.id.desc()).limit(10).all()
     
     safe_findings = []
     for finding in recent_findings:
+        # Get filename
+        file_record = db.query(FileMetadata).filter(FileMetadata.id == finding.file_id).first()
+        if file_record and file_record.file_path:
+            filename = file_record.file_path.split("/")[-1].split("\\")[-1]
+        else:
+            filename = finding.file_id_str or "Unknown File"
+            
         safe_findings.append({
             "finding_id": finding.id,
+            "file_name": filename,
             "category": finding.category,
             "confidence": finding.confidence_score,
             # MASKING IN ACTION: The admin sees the category, but not the actual data!
@@ -475,6 +518,8 @@ def get_admin_kpis(db: Session = Depends(get_db)):
             "total_scanned_files": total_files,
             "total_flagged_files": flagged_files,
             "total_volume_gb": total_volume_gb,
+            "expiring_soon": expiring_soon,
+            "delete_candidates": delete_candidates
         },
         "recent_alerts": safe_findings
     }
@@ -618,6 +663,7 @@ def get_employee_files(employee_id: str, db: Session = Depends(get_db)):
 
     # 1. Find all files owned by this specific employee
     user_files = db.query(FileMetadata).filter(FileMetadata.owner_employee_id == employee_id).all()
+    user_files = [f for f in user_files if not getattr(f, "file_path", "").startswith("[DELETED]")]
     user_file_ids = [f.id for f in user_files]
     
     if not user_file_ids:
@@ -786,7 +832,8 @@ def delete_expired_file(
             finding.owner_resolved = True
 
         # Update FileMetadata
-        file_meta.file_path = f"[DELETED] {file_path}"
+        if not file_meta.file_path.startswith("[DELETED]"):
+            file_meta.file_path = f"[DELETED] {file_path}"
         
         db.commit()
     except Exception as e:
