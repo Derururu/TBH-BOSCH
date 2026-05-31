@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-<link rel="stylesheet" href="/static/css/dashboard.css?v=6">
+<link rel="stylesheet" href="/static/css/dashboard.css?v=8">
 
 <!-- Apply saved theme before paint to avoid flash -->
 <script>
@@ -42,6 +42,23 @@
     <div class="topbar-right" style="display: flex; align-items: center; gap: 14px;">
 
         <button class="menu-btn theme-toggle" id="themeToggleBtn" onclick="window.toggleDarkMode()" title="Toggle Theme" type="button"></button>
+
+        <!-- Notification Bell -->
+        <div class="notif-bell-wrap" id="notifBellWrap">
+            <button class="notif-bell-btn" id="notifBellBtn" onclick="toggleNotifPanel()" title="Notifications">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                <span class="notif-count-dot hidden" id="notifCountDot">0</span>
+            </button>
+            <div class="notif-panel" id="notifPanel">
+                <div class="notif-panel-header">
+                    <span>Notifications</span>
+                    <span id="notifHeaderCount" style="font-size:12px; color: var(--text-muted); font-weight:500;"></span>
+                </div>
+                <div id="notifList">
+                    <div class="notif-empty">No notifications yet</div>
+                </div>
+            </div>
+        </div>
 
         <div class="account">
 
@@ -165,6 +182,46 @@
                     <span>Employee ID</span>
                     <strong>{{ user.employee_id }}</strong>
                 </div>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- ── Compliance Score Wheel ──────────────────────────────── -->
+    <section id="compliance" class="compliance-section reveal">
+
+        <div class="glass-card compliance-wheel-card">
+            <div class="compliance-wheel-wrap">
+                <svg class="compliance-wheel-svg" viewBox="0 0 200 200">
+                    <circle class="compliance-wheel-track" cx="100" cy="100" r="85"></circle>
+                    <circle class="compliance-wheel-arc score-brand" id="scoreArc" cx="100" cy="100" r="85"
+                        stroke-dasharray="534.07" stroke-dashoffset="534.07"></circle>
+                </svg>
+                <div class="compliance-wheel-center">
+                    <span class="compliance-wheel-pct" id="scorePct">—</span>
+                    <span class="compliance-wheel-label">Data Hygiene</span>
+                </div>
+            </div>
+            <span class="compliance-grade grade-brand" id="scoreGrade"></span>
+        </div>
+
+        <div class="glass-card compliance-breakdown">
+            <h3>Score Breakdown</h3>
+            <div class="breakdown-row">
+                <span class="br-label">Total Files</span>
+                <span class="br-value" id="bdTotal">—</span>
+            </div>
+            <div class="breakdown-row">
+                <span class="br-label">Expired Files</span>
+                <span class="br-value danger" id="bdExpired">—</span>
+            </div>
+            <div class="breakdown-row">
+                <span class="br-label">Pending Findings</span>
+                <span class="br-value warning" id="bdPending">—</span>
+            </div>
+            <div class="breakdown-row">
+                <span class="br-label">Resolved Actions</span>
+                <span class="br-value success" id="bdResolved">—</span>
             </div>
         </div>
 
@@ -518,6 +575,126 @@ async function loadOverviewStats() {
 
 // Fire the overview stats fetch on page load
 loadOverviewStats();
+// ── Compliance Score Wheel ─────────────────────────────────────
+async function loadComplianceScore() {
+    const employeeId = "{{ user.employee_id }}";
+    try {
+        const res = await fetch(`/api/compliance-score/${employeeId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const score = data.score;
+        const arc = document.getElementById('scoreArc');
+        const pct = document.getElementById('scorePct');
+        const grade = document.getElementById('scoreGrade');
+        const circumference = 2 * Math.PI * 85; // 534.07
+
+        // Animate the arc
+        const offset = circumference - (score / 100) * circumference;
+        setTimeout(() => { arc.style.strokeDashoffset = offset; }, 100);
+
+        // Animated counter
+        let current = 0;
+        const step = Math.max(1, Math.floor(score / 40));
+        const counter = setInterval(() => {
+            current = Math.min(current + step, score);
+            pct.textContent = current;
+            if (current >= score) clearInterval(counter);
+        }, 30);
+
+        // Color class
+        arc.classList.remove('score-brand');
+        grade.classList.remove('grade-brand');
+        
+        // Add brand accent class
+        arc.classList.add('score-brand');
+        grade.classList.add('grade-brand');
+
+        grade.textContent = data.grade;
+
+        // Breakdown
+        document.getElementById('bdTotal').textContent = data.breakdown.total_files;
+        document.getElementById('bdExpired').textContent = data.breakdown.expired_files;
+        document.getElementById('bdPending').textContent = data.breakdown.pending_findings;
+        document.getElementById('bdResolved').textContent = data.breakdown.resolved_actions;
+
+    } catch(e) { console.error('Compliance score error:', e); }
+}
+loadComplianceScore();
+
+// ── Notification System ────────────────────────────────────────
+function toggleNotifPanel() {
+    const panel = document.getElementById('notifPanel');
+    panel.classList.toggle('open');
+}
+
+// Close notification panel on outside click
+document.addEventListener('click', (e) => {
+    const wrap = document.getElementById('notifBellWrap');
+    if (wrap && !wrap.contains(e.target)) {
+        document.getElementById('notifPanel').classList.remove('open');
+    }
+});
+
+function timeAgo(dateStr) {
+    if (!dateStr) return '';
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return mins + 'm ago';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return hrs + 'h ago';
+    return Math.floor(hrs / 24) + 'd ago';
+}
+
+async function loadNotifications() {
+    const employeeId = "{{ user.employee_id }}";
+    try {
+        const res = await fetch(`/api/employee/notifications/${employeeId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const dot = document.getElementById('notifCountDot');
+        const headerCount = document.getElementById('notifHeaderCount');
+        const list = document.getElementById('notifList');
+
+        if (data.unread_count > 0) {
+            dot.textContent = data.unread_count;
+            dot.classList.remove('hidden');
+        } else {
+            dot.classList.add('hidden');
+        }
+        headerCount.textContent = data.notifications.length + ' total';
+
+        if (data.notifications.length === 0) {
+            list.innerHTML = '<div class="notif-empty">No notifications yet</div>';
+            return;
+        }
+
+        list.innerHTML = data.notifications.map(n => `
+            <div class="notif-item ${n.status === 'unread' ? 'unread' : ''}" onclick="markNotifRead(${n.id}, this)">
+                <div class="notif-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FF4D6A" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                </div>
+                <div class="notif-body">
+                    <div class="notif-msg">${n.message}</div>
+                    <div class="notif-time">${timeAgo(n.created_at)} · ${n.file_ids.length} file${n.file_ids.length !== 1 ? 's' : ''}</div>
+                </div>
+            </div>
+        `).join('');
+
+    } catch(e) { console.error('Notifications error:', e); }
+}
+loadNotifications();
+
+async function markNotifRead(notifId, el) {
+    try {
+        await fetch(`/api/employee/notifications/${notifId}/read`, { method: 'POST' });
+        el.classList.remove('unread');
+        // Refresh count
+        loadNotifications();
+    } catch(e) { console.error('Mark read error:', e); }
+}
 
 
 </script>

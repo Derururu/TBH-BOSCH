@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import database
-from database import get_db, Employee, FileMetadata, Finding
+from database import get_db, Employee, FileMetadata, Finding, Notification
 
 import os
 from typing import Optional, List, Dict, Any
@@ -978,7 +978,6 @@ def search_findings(
 
     all_results = query.all()
     total_count = len(all_results)
-
     risk_breakdown: Dict[str, int] = {}
     for res in all_results:
         rl = res.risk_level or "unknown"
@@ -1006,6 +1005,187 @@ def search_findings(
         "metadata": {
             "total_count": total_count,
             "risk_breakdown": risk_breakdown,
+        },
+    }
+
+
+# ── Notification & Compliance Score System ──────────────────────────────────
+
+import json as _json
+from datetime import datetime as _dt, timedelta as _td
+
+
+class DeletionRequestPayload(PydanticBaseModel):
+    target_employee_id: str
+    file_ids: List[int]
+    message: str = ""
+    admin_employee_id: str
+
+
+@app.post("/api/admin/deletion-request")
+def send_deletion_request(
+    payload: DeletionRequestPayload,
+    db: Session = Depends(get_db),
+):
+    """Admin selects flagged files for an employee and pushes a deletion-request
+    notification to that employee's dashboard."""
+    # Validate the target employee exists
+    target = db.query(Employee).filter(
+        Employee.employee_id == payload.target_employee_id
+    ).first()
+    if not target:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Target employee not found")
+
+    file_count = len(payload.file_ids)
+    auto_msg = payload.message or (
+        f"Admin has flagged {file_count} file{'s' if file_count != 1 else ''}"
+        f" for immediate deletion."
+    )
+
+    notif = Notification(
+        employee_id=payload.target_employee_id,
+        admin_id=payload.admin_employee_id,
+        message=auto_msg,
+        file_ids=_json.dumps(payload.file_ids),
+        status="unread",
+        created_at=_dt.now(),
+    )
+    db.add(notif)
+    db.commit()
+    db.refresh(notif)
+
+    return {
+        "status": "success",
+        "notification_id": notif.id,
+        "message": f"Deletion request sent to {target.first_name} {target.last_name}",
+    }
+
+
+@app.get("/api/employee/notifications/{employee_id}")
+def get_employee_notifications(employee_id: str, db: Session = Depends(get_db)):
+    """Return all notifications for an employee, unread first."""
+    notifs = (
+        db.query(Notification)
+        .filter(Notification.employee_id == employee_id)
+        .order_by(Notification.status.asc(), Notification.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    results = []
+    for n in notifs:
+        created = n.created_at
+        created_str = created.isoformat() if created else None
+        results.append({
+            "id": n.id,
+            "message": n.message,
+            "file_ids": _json.loads(n.file_ids) if n.file_ids else [],
+            "status": n.status,
+            "admin_id": n.admin_id,
+            "created_at": created_str,
+        })
+    unread_count = sum(1 for n in notifs if n.status == "unread")
+    return {"notifications": results, "unread_count": unread_count}
+
+
+@app.post("/api/employee/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: int, db: Session = Depends(get_db)):
+    """Mark a single notification as read."""
+    notif = db.query(Notification).filter(Notification.id == notification_id).first()
+    if not notif:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Notification not found")
+    if notif.status == "unread":
+        notif.status = "read"
+        db.commit()
+    return {"status": "success"}
+
+
+@app.get("/api/compliance-score/{employee_id}")
+def get_compliance_score(employee_id: str, db: Session = Depends(get_db)):
+    """Compute a Data Hygiene Score (0-100) for an employee.
+
+    Heuristic:
+      - Start at 100
+      - Penalise each expired file based on how many days overdue
+      - Penalise each unresolved pending finding
+      - Reward files that were deleted/resolved promptly
+    """
+    now = _dt.now()
+    score = 100.0
+
+    files = db.query(FileMetadata).filter(
+        FileMetadata.owner_employee_id == employee_id
+    ).all()
+
+    total_files = len(files)
+    expired_count = 0
+    pending_findings_count = 0
+    resolved_quickly = 0
+
+    for f in files:
+        # ── Retention deadline penalty ────────────────────────────────
+        deadline = f.retention_deadline
+        if deadline:
+            if isinstance(deadline, str):
+                try:
+                    deadline = _dt.fromisoformat(deadline)
+                except ValueError:
+                    deadline = None
+            if deadline and hasattr(deadline, 'tzinfo') and getattr(deadline, 'tzinfo', None):
+                deadline = deadline.replace(tzinfo=None)
+
+            if deadline and deadline < now:
+                expired_count += 1
+                days_overdue = (now - deadline).days
+                if days_overdue <= 2:
+                    score -= 3
+                elif days_overdue <= 7:
+                    score -= 8
+                elif days_overdue <= 30:
+                    score -= 15
+                else:
+                    score -= 25
+
+        # ── Pending findings penalty ──────────────────────────────────
+        findings = db.query(Finding).filter(
+            Finding.file_id == f.id,
+            Finding.status == "Pending",
+        ).all()
+        pending_findings_count += len(findings)
+        score -= 5 * len(findings)
+
+        # ── Reward quick resolution ───────────────────────────────────
+        resolved = db.query(Finding).filter(
+            Finding.file_id == f.id,
+            Finding.status.like("%Completed%"),
+        ).all()
+        resolved_quickly += len(resolved)
+        score += 2 * len(resolved)  # bonus
+
+    # Clamp
+    score = max(0, min(100, score))
+    score = round(score)
+
+    # Determine grade label
+    if score >= 80:
+        grade = "Excellent"
+    elif score >= 60:
+        grade = "Good"
+    elif score >= 40:
+        grade = "Needs Attention"
+    else:
+        grade = "Critical"
+
+    return {
+        "employee_id": employee_id,
+        "score": score,
+        "grade": grade,
+        "breakdown": {
+            "total_files": total_files,
+            "expired_files": expired_count,
+            "pending_findings": pending_findings_count,
+            "resolved_actions": resolved_quickly,
         },
     }
 

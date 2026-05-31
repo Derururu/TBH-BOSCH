@@ -983,14 +983,31 @@ async function searchEmployees() {
         }
 
         let html = '';
-        data.forEach(emp => {
+        
+        // Fetch compliance scores for all matched employees in parallel
+        const scores = await Promise.all(data.map(async (emp) => {
+            try {
+                const r = await fetch(`/api/compliance-score/${emp.employee_id}`);
+                if (r.ok) return await r.json();
+            } catch(e) { console.error('Score fetch failed for', emp.employee_id); }
+            return null;
+        }));
+
+        data.forEach((emp, index) => {
             const initials = (emp.first_name?.[0] || '') + (emp.last_name?.[0] || '');
+            const scoreData = scores[index];
+            
+            let badgeHtml = '';
+            if (scoreData) {
+                badgeHtml = `<span class="compliance-badge badge-brand" style="margin-left: 8px;"><span class="badge-dot"></span>${scoreData.score}%</span>`;
+            }
+
             html += `
                 <div class="glass-card emp-result-card" id="emp-card-${emp.employee_id}" onclick="selectEmployee(${JSON.stringify(emp).replace(/"/g, '&quot;')})">
                     <div class="emp-info">
                         <div class="emp-avatar">${initials}</div>
                         <div class="emp-details">
-                            <div class="emp-name">${escapeHtml(emp.first_name)} ${escapeHtml(emp.last_name)}</div>
+                            <div class="emp-name">${escapeHtml(emp.first_name)} ${escapeHtml(emp.last_name)}${badgeHtml}</div>
                             <div class="emp-meta">${escapeHtml(emp.email)} · ID: ${escapeHtml(emp.employee_id)}</div>
                         </div>
                     </div>
@@ -1128,7 +1145,8 @@ function renderEmployeeDetail(emp, data) {
             const sizeKB = (file.size_bytes / 1024).toFixed(1);
 
             html += `
-                <div class="file-row" onclick="toggleFindings('${file.file_id}')">
+                <div class="file-row" onclick="if(event.target.type !== 'checkbox') toggleFindings('${file.file_id}')">
+                    ${hasFindings ? `<input type="checkbox" class="file-select-cb" value="${file.file_id}" onchange="updateSelectedFiles()">` : `<div style="width:18px;"></div>`}
                     <div class="file-icon">${fileIcon}</div>
                     <div class="file-info">
                         <div class="file-name">${escapeHtml(file.file_name)}</div>
@@ -1174,6 +1192,17 @@ function renderEmployeeDetail(emp, data) {
 
     html += `
             </div>
+            
+            <!-- Deletion Request Bar (hidden by default) -->
+            <div class="deletion-bar" id="deletionBar" style="display: none;">
+                <div class="del-bar-info">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                    <span><span class="del-bar-count" id="delBarCount">0</span> Files Selected</span>
+                </div>
+                <button class="del-bar-send" onclick="sendDeletionRequest()">
+                    Push Deletion Request to Employee
+                </button>
+            </div>
         </div>
     `;
 
@@ -1191,6 +1220,47 @@ function toggleFindings(fileId) {
     const el = document.getElementById(`findings-${fileId}`);
     if (el) {
         el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+function updateSelectedFiles() {
+    const checked = document.querySelectorAll('.file-select-cb:checked');
+    const bar = document.getElementById('deletionBar');
+    const countSpan = document.getElementById('delBarCount');
+    
+    if (checked.length > 0) {
+        bar.style.display = 'flex';
+        countSpan.textContent = checked.length;
+    } else {
+        bar.style.display = 'none';
+    }
+}
+
+async function sendDeletionRequest() {
+    const checked = Array.from(document.querySelectorAll('.file-select-cb:checked')).map(cb => cb.value);
+    if (checked.length === 0 || !currentEmployee) return;
+
+    try {
+        const res = await fetch('/api/admin/deletion-request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                target_employee_id: currentEmployee.employee_id,
+                file_ids: checked.map(Number),
+                admin_employee_id: '{{ user.employee_id }}'
+            })
+        });
+
+        if (!res.ok) throw new Error('Failed to send request');
+
+        showToast(`✓ Deletion request pushed to ${currentEmployee.first_name}`);
+        
+        // Uncheck all
+        document.querySelectorAll('.file-select-cb:checked').forEach(cb => cb.checked = false);
+        updateSelectedFiles();
+        
+    } catch(e) {
+        alert('Error sending request: ' + e.message);
     }
 }
 

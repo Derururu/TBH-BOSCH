@@ -1063,3 +1063,524 @@ body.light ::-webkit-scrollbar-thumb:hover {
     color: var(--accent-red);
     font-weight: 600;
 }
+
+/* =========================================
+   COMPLIANCE SCORE WHEEL (Employee)
+   Minimalist Liquid Glass Aesthetic
+   ========================================= */
+
+.compliance-section {
+    display: flex;
+    gap: 30px;
+    align-items: stretch;
+    margin-bottom: 40px;
+}
+
+.compliance-wheel-card {
+    flex: 0 0 280px;
+    padding: 36px 28px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 
+        0 15px 35px rgba(0,0,0,0.2), 
+        inset 0 1px 0 rgba(255,255,255,0.15),
+        inset 0 -1px 0 rgba(255,255,255,0.02);
+    overflow: hidden;
+}
+
+body.light .compliance-wheel-card {
+    background: linear-gradient(145deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0.4) 100%);
+    border: 1px solid rgba(255,255,255,0.6);
+    box-shadow: 
+        0 15px 35px rgba(0,0,0,0.05),
+        inset 0 1px 0 rgba(255,255,255,1);
+}
+
+.compliance-wheel-wrap {
+    position: relative;
+    width: 180px;
+    height: 180px;
+    margin-bottom: 16px;
+}
+
+.compliance-wheel-svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.compliance-wheel-track {
+    fill: none;
+    stroke: rgba(255,255,255,0.06);
+    stroke-width: 10;
+}
+
+body.light .compliance-wheel-track {
+    stroke: rgba(0,0,0,0.07);
+}
+
+.compliance-wheel-arc {
+    fill: none;
+    stroke-width: 10;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1),
+                stroke 0.8s ease;
+    /* Removed glow effect for a flat minimalist look */
+}
+
+/* Minimalist Neutral Accent */
+.compliance-wheel-arc.score-brand { 
+    stroke: rgba(255,255,255,0.6); 
+}
+
+body.light .compliance-wheel-arc.score-brand {
+    stroke: rgba(0,0,0,0.5); 
+}
+
+.compliance-wheel-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.compliance-wheel-pct {
+    font-family: 'Space Grotesk', monospace;
+    font-size: 44px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -2px;
+    color: var(--text-primary);
+}
+
+.compliance-wheel-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-weight: 600;
+}
+
+.compliance-grade {
+    font-size: 14px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+    color: var(--text-secondary);
+}
+
+.compliance-grade.grade-brand { 
+    color: rgba(255,255,255,0.7); 
+}
+
+body.light .compliance-grade.grade-brand {
+    color: rgba(0,0,0,0.7);
+}
+
+/* Breakdown mini-stats */
+.compliance-breakdown {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 14px;
+    padding: 30px 28px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 
+        0 15px 35px rgba(0,0,0,0.15),
+        inset 0 1px 0 rgba(255,255,255,0.1);
+}
+
+body.light .compliance-breakdown {
+    background: linear-gradient(145deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.3) 100%);
+    border: 1px solid rgba(255,255,255,0.5);
+    box-shadow: 
+        0 15px 35px rgba(0,0,0,0.04),
+        inset 0 1px 0 rgba(255,255,255,0.8);
+}
+
+.compliance-breakdown h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--text-primary);
+}
+
+.breakdown-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: rgba(255,255,255,0.03);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--border-subtle);
+    transition: all 0.2s ease;
+}
+
+body.light .breakdown-row {
+    background: rgba(0,0,0,0.03);
+}
+
+.breakdown-row:hover {
+    background: rgba(255,255,255,0.06);
+    border-left-color: var(--accent-blue);
+}
+
+.breakdown-row .br-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.breakdown-row .br-value {
+    font-family: 'Space Grotesk', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.breakdown-row .br-value.danger { color: #FF4D6A; }
+.breakdown-row .br-value.warning { color: #FF8C00; }
+.breakdown-row .br-value.success { color: #10b981; }
+
+/* =========================================
+   ADMIN COMPACT COMPLIANCE BADGE
+   ========================================= */
+
+.compliance-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    
+    /* Frosted glass look */
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.9);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+body.light .compliance-badge {
+    background: rgba(255,255,255,0.8);
+    border: 1px solid rgba(255,255,255,0.9);
+    color: rgba(0,0,0,0.8);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.compliance-badge .badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.compliance-badge.badge-brand .badge-dot { 
+    background: rgba(255,255,255,0.9); 
+    box-shadow: 0 0 6px rgba(255,255,255,0.5);
+}
+
+body.light .compliance-badge.badge-brand .badge-dot {
+    background: rgba(0,123,192,0.8);
+    box-shadow: none;
+}
+
+/* =========================================
+   NOTIFICATION BELL & PANEL
+   ========================================= */
+
+.notif-bell-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.notif-bell-btn {
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.notif-bell-btn:hover {
+    border-color: var(--border-hover);
+    background: var(--bg-card-hover);
+}
+
+.notif-count-dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 9px;
+    background: #FF4D6A;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    border: 2px solid var(--bg-primary);
+    animation: dotPulse 2s ease-in-out infinite;
+}
+
+@keyframes dotPulse {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.15); }
+}
+
+.notif-count-dot.hidden {
+    display: none;
+}
+
+/* Notification dropdown panel */
+.notif-panel {
+    position: absolute;
+    top: 50px;
+    right: 0;
+    width: 360px;
+    max-height: 440px;
+    overflow-y: auto;
+    background: var(--bg-card);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card-hover);
+    z-index: 2000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+}
+
+.notif-panel.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.notif-panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    background: var(--bg-card);
+    backdrop-filter: blur(16px);
+    z-index: 5;
+}
+
+.notif-item {
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+body.light .notif-item {
+    border-bottom-color: rgba(0,0,0,0.04);
+}
+
+.notif-item:hover {
+    background: var(--bg-card-hover);
+}
+
+.notif-item.unread {
+    border-left: 3px solid #FF4D6A;
+    background: rgba(255,77,106,0.04);
+}
+
+.notif-item .notif-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent-red-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 14px;
+}
+
+.notif-item .notif-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.notif-item .notif-msg {
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.notif-item .notif-time {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+
+.notif-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+/* =========================================
+   DELETION REQUEST ACTION BAR (Admin)
+   ========================================= */
+
+.deletion-bar {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 14px 24px;
+    background: rgba(234,0,22,0.08);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(234,0,22,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    z-index: 100;
+    animation: fadeInDown 0.3s ease;
+}
+
+body.light .deletion-bar {
+    background: rgba(234,0,22,0.06);
+}
+
+.deletion-bar .del-bar-info {
+    font-size: 13px;
+    font-weight: 600;
+    color: #FF4D6A;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.deletion-bar .del-bar-count {
+    background: #FF4D6A;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.deletion-bar .del-bar-send {
+    padding: 10px 24px;
+    background: linear-gradient(135deg, #ea0016, #ff4d6a);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: 'Inter', sans-serif;
+    letter-spacing: 0.3px;
+}
+
+.deletion-bar .del-bar-send:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(234,0,22,0.35);
+}
+
+/* File selection checkbox */
+.file-select-cb {
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    border: 2px solid var(--border-subtle);
+    background: transparent;
+    cursor: pointer;
+    flex-shrink: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.file-select-cb:checked {
+    background: #FF4D6A;
+    border-color: #FF4D6A;
+}
+
+.file-select-cb:checked::after {
+    content: "✓";
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* =========================================
+   RESPONSIVE ADJUSTMENTS (Compliance)
+   ========================================= */
+
+@media (max-width: 768px) {
+    .compliance-section {
+        flex-direction: column;
+    }
+    .compliance-wheel-card {
+        flex: none;
+        width: 100%;
+    }
+    .notif-panel {
+        width: 300px;
+        right: -60px;
+    }
+}

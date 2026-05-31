@@ -101,6 +101,19 @@ class ScanError(Base):
     error_type = Column(String)
     message = Column(String)
 
+class Notification(Base):
+    """Admin → Employee deletion-request notifications."""
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(String, index=True)          # target employee
+    admin_id = Column(String)                          # who sent it
+    message = Column(String, default="")
+    file_ids = Column(String, default="[]")            # JSON list of file IDs
+    status = Column(String, default="unread")          # unread | read | actioned
+    created_at = Column(DateTime, default=datetime.now)
+    actioned_at = Column(DateTime, nullable=True)
+
 
 # ── Reusable DB session dependency ────────────────────────────────────────────
 def get_db():
