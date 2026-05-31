@@ -24,6 +24,9 @@ class PIIType(str, enum.Enum):
     PHONE = "phone"
     IBAN = "iban"
     CREDIT_CARD = "credit_card"
+    NAME = "name"
+    ADDRESS = "address"
+    EMPLOYEE_ID = "employee_id"
 
 
 # ── Input model ──────────────────────────────────────────────

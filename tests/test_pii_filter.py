@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import List
 
 import pytest
 
 from pii_filter.models import DocumentInput, FlaggedDocument, PIIMatch, PIIType
+from pii_filter.file_ingestor import ingest_file
 from pii_filter.pii_scanner import PIIScanner, _luhn_check
 from pii_filter.pipeline import FastFilterPipeline
 from pii_filter.state_manager import InMemoryStateManager
@@ -60,6 +62,42 @@ class TestPhoneDetection:
         matches = scanner.scan("Call (555) 123-4567 for support.")
         phones = [m for m in matches if m.pii_type == PIIType.PHONE]
         assert len(phones) >= 1
+
+    def test_tax_id_digits_not_detected_as_phone(self) -> None:
+        scanner = PIIScanner()
+        matches = scanner.scan("Tax ID: DE123456789")
+        phones = [m for m in matches if m.pii_type == PIIType.PHONE]
+        assert phones == []
+
+
+class TestContextPIIDetection:
+    def test_contextual_name(self) -> None:
+        scanner = PIIScanner()
+        matches = scanner.scan("Name: Elena Fischer\nDepartment: Digital Operations")
+        names = [m for m in matches if m.pii_type == PIIType.NAME]
+        assert len(names) == 1
+        assert "Elena Fischer" in names[0].matched_value
+
+    def test_employee_name_and_id(self) -> None:
+        scanner = PIIScanner()
+        matches = scanner.scan("Employee: Sara Hoffmann (E-20491)")
+        names = [m for m in matches if m.pii_type == PIIType.NAME]
+        employee_ids = [m for m in matches if m.pii_type == PIIType.EMPLOYEE_ID]
+        assert len(names) == 1
+        assert len(employee_ids) == 1
+        assert employee_ids[0].matched_value == "E-20491"
+
+    def test_address(self) -> None:
+        scanner = PIIScanner()
+        matches = scanner.scan("Address: Hauptstr. 12, 70173 Stuttgart")
+        addresses = [m for m in matches if m.pii_type == PIIType.ADDRESS]
+        assert len(addresses) == 1
+        assert "70173 Stuttgart" in addresses[0].matched_value
+
+    def test_blank_templates_are_not_flagged(self) -> None:
+        scanner = PIIScanner()
+        text = "Name: ______\nEmployee: ______\nAddress: ______\nParticipant: ______"
+        assert scanner.scan(text) == []
 
 
 class TestIBANDetection:
@@ -193,6 +231,53 @@ class TestOverlapResolution:
     def test_no_matches_returns_empty(self) -> None:
         result = PIIScanner._resolve_overlaps([])
         assert result == []
+
+
+class TestOneDrivePDFDatasetRegression:
+    def test_filled_examples_are_detected_without_tax_id_phone_false_positive(self) -> None:
+        root = Path("onedrive_gdpr_pdf_test_set")
+        if not root.exists():
+            pytest.skip("OneDrive GDPR PDF test set is not present in this checkout")
+
+        expected_types = {
+            "Expense_Report_Example_A.pdf": {PIIType.NAME, PIIType.EMPLOYEE_ID},
+            "Expense_Report_Example_B.pdf": {PIIType.NAME, PIIType.EMPLOYEE_ID},
+            "IT_Access_Request_Example_A.pdf": {PIIType.NAME},
+            "IT_Access_Request_Example_B.pdf": {PIIType.NAME},
+            "Supplier_Onboarding_Example_A.pdf": {PIIType.EMAIL, PIIType.ADDRESS},
+            "Supplier_Onboarding_Example_B.pdf": {PIIType.EMAIL, PIIType.ADDRESS},
+            "Training_Evaluation_Example_A.pdf": {PIIType.NAME},
+            "Training_Evaluation_Example_B.pdf": {PIIType.NAME},
+        }
+
+        scanner = PIIScanner()
+        for file_name, required_types in expected_types.items():
+            path = next(root.rglob(file_name))
+            doc = ingest_file(path)
+            assert doc is not None
+            matches = scanner.scan(doc.content)
+            found_types = {m.pii_type for m in matches}
+            assert required_types <= found_types, file_name
+
+            tax_id_phones = [
+                m.matched_value
+                for m in matches
+                if m.pii_type == PIIType.PHONE and m.matched_value in {"123456789", "987654321"}
+            ]
+            assert tax_id_phones == []
+
+    def test_blank_pdf_templates_remain_clean(self) -> None:
+        root = Path("onedrive_gdpr_pdf_test_set")
+        if not root.exists():
+            pytest.skip("OneDrive GDPR PDF test set is not present in this checkout")
+
+        scanner = PIIScanner()
+        for path in root.rglob("*.pdf"):
+            if "_Example_" in path.name:
+                continue
+            doc = ingest_file(path)
+            assert doc is not None
+            assert scanner.scan(doc.content) == [], path.name
 
 
 # ─────────────────────────────────────────────────────────────

@@ -34,17 +34,54 @@ _EMAIL_RE = re.compile(
 
 _PHONE_RE = re.compile(
     r"""
-    (?<!\d)                          # not preceded by a digit
+    (?<![\w])                         # not inside an identifier
     (?:
-        \+?\d{1,3}                   # optional country code
-        [-.\s]?
-    )?
-    \(?\d{2,4}\)?                    # area code (with or without parens)
-    [-.\s]?
-    \d{3,4}                          # subscriber part 1
-    [-.\s]?
-    \d{3,5}                          # subscriber part 2
-    (?!\d)                           # not followed by a digit
+        \+\d{1,3}[-.\s]?\d{2,4}[-.\s]?\d{3,5}[-.\s]?\d{3,5}
+        |
+        \(\d{2,4}\)\s?\d{3,4}[-.\s]\d{3,5}
+        |
+        \d{2,4}[-.\s]\d{3,4}[-.\s]\d{3,5}
+    )
+    (?![\w])                          # not inside an identifier
+    """,
+    re.VERBOSE,
+)
+
+_NAME_RE = re.compile(
+    r"""
+    \b
+    (?:
+        Employee|Name|Participant|Manager|Customer|Candidate|Person|Vendor[ \t]+contact
+    )
+    [ \t]*:[ \t]*
+    [A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’.-]+
+    (?:[ \t]+[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’.-]+){1,3}
+    \b
+    """,
+    re.VERBOSE,
+)
+
+_ADDRESS_RE = re.compile(
+    r"""
+    \b
+    (?:(?:Home|Billing|Shipping)\s+)?Address
+    [ \t]*:[ \t]*
+    [A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ.-]+
+    [ \t]+\d+[A-Za-z]?
+    ,\s*
+    \d{5}
+    [ \t]+
+    [A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ -]+
+    \b
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+
+_EMPLOYEE_ID_RE = re.compile(
+    r"""
+    \b
+    E-\d{5}
+    \b
     """,
     re.VERBOSE,
 )
@@ -85,6 +122,9 @@ _PATTERNS: List[Tuple[re.Pattern[str], PIIType]] = [
     (_PHONE_RE, PIIType.PHONE),
     (_IBAN_RE, PIIType.IBAN),
     (_CC_RE, PIIType.CREDIT_CARD),
+    (_NAME_RE, PIIType.NAME),
+    (_ADDRESS_RE, PIIType.ADDRESS),
+    (_EMPLOYEE_ID_RE, PIIType.EMPLOYEE_ID),
 ]
 
 # ── Snippet settings ────────────────────────────────────────
@@ -389,5 +429,3 @@ class PIIScanner:
             # an already-accepted longer match → discard it.
 
         return accepted
-
-

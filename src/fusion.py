@@ -69,11 +69,13 @@ ALL_PII_TYPES = [t.value for t in TeammatePIIType] + GERMAN_PII_TYPES
 
 _GERMAN_TAX_DE = re.compile(r'\bDE\d{9}\b')
 _GERMAN_TAX_SLASH = re.compile(r'\b\d{2}/\d{3}/\d{5}\b')
-_GERMAN_EMPLOYEE_ID = re.compile(r'\bEMP-\d{5,8}\b')
+_GERMAN_EMPLOYEE_ID = re.compile(r'\b(?:EMP-\d{5,8}|E-\d{5})\b')
 _GERMAN_ADDRESS = re.compile(r'\b\d{5}[ \t]+[A-Z][a-zäöüß]+([ \t]+\d{1,3}[a-z]?)?\b')
-_GERMAN_SIGNATURE = re.compile(r'(?i)(?:Signed|Signature|Unterschrift)[\s:]*[\w\s.]+')
+_GERMAN_SIGNATURE = re.compile(
+    r"(?im)^\s*(Signed|Signature|Unterschrift)[ \t:]+([A-ZÀ-ÖØ-Þ](?:[A-Za-zÀ-ÖØ-öø-ÿ'’.-]*|\.)(?:[ \t]+[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’.-]+){1,3})\b"
+)
 _GERMAN_NAME_FIELD = re.compile(
-    r'(?im)^\s*(Name|Vorname|Nachname|Full Name|Employee|Manager|Participant|Teilnehmer|Reported by)\s*:\s*(.+)$'
+    r"(?im)^\s*(Employee|Name|Participant|Manager|Customer|Candidate|Person|Vendor[ \t]+contact|Vorname|Nachname|Full Name|Teilnehmer|Reported by)[ \t]*:[ \t]*([A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’.-]+(?:[ \t]+[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’.-]+){1,3})\b"
 )
 
 

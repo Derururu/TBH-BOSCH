@@ -24,7 +24,7 @@ _PATTERNS: list[tuple[str, str, str, str]] = [
         "email", "medium", "mask",
     ),
     (
-        r'\bEMP-\d{5,8}\b',
+        r'\b(?:EMP-\d{5,8}|E-\d{5})\b',
         "employee_id", "medium", "mask",
     ),
     (
@@ -36,15 +36,15 @@ _PATTERNS: list[tuple[str, str, str, str]] = [
         "tax_id", "high", "delete",
     ),
     (
-        r'\b\d{5}[ \t]+[A-Z][a-zäöüß]+([ \t]+\d{1,3}[a-z]?)?\b',
+        r'(?i)\b((?:(?:Home|Billing|Shipping)\s+)?Address)[ \t]*:[ \t]*([A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ.-]+[ \t]+\d+[A-Za-z]?,\s*\d{5}[ \t]+[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ -]+)\b',
         "address", "medium", "review",
     ),
     (
-        r'(?i)(?:Signed|Signature|Unterschrift)[\s:]*[\w\s.]+',
+        r"(?im)^\s*(Signed|Signature|Unterschrift)[ \t:]+([A-ZÀ-ÖØ-Þ](?:[A-Za-zÀ-ÖØ-öø-ÿ'’.-]*|\.)(?:[ \t]+[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’.-]+){1,3})\b",
         "signature", "low", "retain",
     ),
     (
-        r'(?im)^\s*(Name|Vorname|Nachname|Full Name|Employee|Manager|Participant|Teilnehmer|Reported by)\s*:\s*(.+)$',
+        r"(?im)^\s*(Employee|Name|Participant|Manager|Customer|Candidate|Person|Vendor[ \t]+contact|Vorname|Nachname|Full Name|Teilnehmer|Reported by)[ \t]*:[ \t]*([A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’.-]+(?:[ \t]+[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ'’.-]+){1,3})\b",
         "name", "medium", "mask",
     ),
 ]
@@ -79,7 +79,7 @@ _TYPE_KEYWORDS: dict[str, list[str]] = {
 
 _SEMANTIC_PATTERNS: list[tuple[str, str, str, str]] = [
     # (regex, type, risk_level, action)
-    (r'(?i)\b(?:call|phone|contact(?:ed)?)\s+(?:[A-Z][a-z]+\s+)?(?:at|on)\s+([\d\-\+\(\)\s]{7,20})\b', "phone", "medium", "mask"),
+    (r'(?i)\b(?:call|phone|telephone|mobile|contact(?:ed)?)\s+(?:[A-Z][a-z]+\s+)?(?:at|on)?\s*((?:\+\d{1,3}[-.\s]?\d{2,4}[-.\s]?\d{3,5}[-.\s]?\d{3,5}|\(\d{2,4}\)\s?\d{3,4}[-.\s]\d{3,5}|\d{2,4}[-.\s]\d{3,4}[-.\s]\d{3,5}))\b', "phone", "medium", "mask"),
     (r'(?i)\b(?:password|pwd|passcode|secret)\s*[:=]\s*([^\s]{5,20})\b', "password", "high", "mask"),
     (r'(?i)\b(?:ssn|social security)\s*[:=]?\s*([\d\-]{9,11})\b', "ssn", "high", "delete"),
 ]
