@@ -192,34 +192,67 @@ from fastapi.responses import RedirectResponse
 
 @app.post("/login")
 def login(
-    request: Request, # <-- Added to allow template reloading
+    request: Request,
     response: Response,
     role: str = Form(...),
     email: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    if role == "admin":
-        return RedirectResponse(url="/admin-dashboard", status_code=303)
-
     # Search for the user in the database
     user = db.query(Employee).filter(Employee.email == email).first()
     
     if not user or user.password != password:
-        # THE FIX: Return the HTML page with an error flag instead of raw JSON
         return templates.TemplateResponse(
             request=request,
             name="login.html",
             context={"error": "Invalid email or password. Please try again."}
         )
 
-    # Redirect to dashboard AND set a browser cookie with their ID
-    redirect = RedirectResponse(url="/employee-dashboard", status_code=303)
+    if role == "admin":
+        redirect = RedirectResponse(url="/admin-dashboard", status_code=303)
+    else:
+        redirect = RedirectResponse(url="/employee-dashboard", status_code=303)
+        
     redirect.set_cookie(key="session_emp_id", value=user.employee_id)
     return redirect
 
 
 from typing import Optional
+
+@app.get("/admin-dashboard")
+def admin_dashboard(
+    request: Request, 
+    session_emp_id: Optional[str] = Cookie(None),
+    db: Session = Depends(get_db)
+):
+    if not session_emp_id:
+        return RedirectResponse(url="/")
+        
+    user = db.query(Employee).filter(Employee.employee_id == session_emp_id).first()
+    
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_dashboard.html",
+        context={"user": user}
+    )
+
+@app.get("/admin-database-explorer")
+def admin_database_explorer(
+    request: Request, 
+    session_emp_id: Optional[str] = Cookie(None),
+    db: Session = Depends(get_db)
+):
+    if not session_emp_id:
+        return RedirectResponse(url="/")
+        
+    user = db.query(Employee).filter(Employee.employee_id == session_emp_id).first()
+    
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_database_explorer.html",
+        context={"user": user}
+    )
 
 @app.get("/employee-dashboard")
 def employee_dashboard(
@@ -406,6 +439,67 @@ def get_admin_kpis(db: Session = Depends(get_db)):
             "total_volume_gb": total_volume_gb,
         },
         "recent_alerts": safe_findings
+    }
+
+@app.get("/api/admin/employees/search")
+def search_employees(q: str, db: Session = Depends(get_db)):
+    if not q:
+        return []
+    
+    q_lower = q.lower()
+    employees = db.query(Employee).all()
+    results = []
+    for emp in employees:
+        full_name = f"{emp.first_name or ''} {emp.last_name or ''}".lower()
+        if (q_lower in full_name or 
+            q_lower in (emp.first_name or "").lower() or 
+            q_lower in (emp.last_name or "").lower() or 
+            q_lower in (emp.email or "").lower() or 
+            q_lower in (emp.employee_id or "").lower()):
+            
+            results.append({
+                "employee_id": emp.employee_id,
+                "first_name": emp.first_name,
+                "last_name": emp.last_name,
+                "email": emp.email,
+                "department": emp.department,
+                "location": emp.location
+            })
+    return results
+
+@app.post("/api/admin/extend-retention/{file_id}")
+def extend_retention(file_id: str):
+    # Mock updating the retention to indicate needed for a while
+    return {"status": "success", "message": "Retention extended"}
+
+
+from pydantic import BaseModel
+
+class RetainDocumentRequest(BaseModel):
+    reason: str
+    project_name: str
+    notes: str = ""
+    admin_email: str = ""
+
+@app.post("/api/admin/retain-document/{file_id}")
+def retain_document(file_id: str, req: RetainDocumentRequest):
+    """Mark a document as business-critical with a justification.
+    
+    The admin provides a reason (e.g., 'active_project'), a project name,
+    and optional notes explaining why the flagged data must be retained
+    beyond its scheduled GDPR deletion date.
+    """
+    import logging
+    logging.info(
+        "RETENTION JUSTIFICATION — file=%s reason=%s project=%s admin=%s notes=%s",
+        file_id, req.reason, req.project_name, req.admin_email, req.notes
+    )
+    return {
+        "status": "success",
+        "message": f"Document '{file_id}' retained for business reasons: {req.project_name}",
+        "file_id": file_id,
+        "reason": req.reason,
+        "project_name": req.project_name
     }
 
 

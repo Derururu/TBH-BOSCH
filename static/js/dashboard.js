@@ -74,8 +74,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         let matched = false;
 
-        if (path === "/employee-dashboard" || path === "/") {
-            if (!hash) hash = "#profile";
+        if (path === "/employee-dashboard" || path === "/admin-dashboard" || path === "/") {
+            if (!hash) {
+                hash = path === "/admin-dashboard" ? "#admin-overview" : "#profile";
+            }
             sidebarLinks.forEach(link => {
                 if (link.getAttribute("href").includes(hash)) {
                     link.classList.add("active");
@@ -105,7 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Scroll-based active state for dashboard
     const currentPath = window.location.pathname;
-    if (currentPath === "/employee-dashboard" || currentPath === "/") {
+    if (currentPath === "/employee-dashboard" || currentPath === "/admin-dashboard" || currentPath === "/") {
         window.addEventListener('scroll', () => {
             let current = '';
             const sections = document.querySelectorAll('section[id]');
@@ -150,7 +152,27 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // =============================================
-    // 5. PARTICLE CANVAS
+    // 5. TOPBAR HIDE ON SCROLL DOWN
+    // =============================================
+    let lastScrollY = window.scrollY;
+    const topbar = document.querySelector(".topbar");
+
+    if (topbar) {
+        window.addEventListener("scroll", () => {
+            const currentScrollY = window.scrollY;
+            if (currentScrollY > lastScrollY && currentScrollY > 60) {
+                // Scrolling down
+                topbar.classList.add("topbar--hidden");
+            } else {
+                // Scrolling up
+                topbar.classList.remove("topbar--hidden");
+            }
+            lastScrollY = currentScrollY;
+        }, { passive: true });
+    }
+
+    // =============================================
+    // 6. PARTICLE CANVAS
     // =============================================
     initParticles();
 

@@ -114,6 +114,16 @@ body::after {
     box-shadow: 0 30px 80px rgba(0,0,0,0.3);
     z-index: 2;
     animation: loginSlideUp 0.8s cubic-bezier(0.16,1,0.3,1);
+    position: relative;
+}
+
+.login-container::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 6px;
+    background: linear-gradient(90deg, #00CCFF, #005691, #ea0016, #00A859, #FFB900);
+    z-index: 10;
 }
 
 @keyframes loginSlideUp {
@@ -131,7 +141,7 @@ body::after {
 .left-panel {
     flex: 1;
     padding: 70px;
-    background: linear-gradient(135deg, #ea0016, #d10000, #8b0000);
+    background: linear-gradient(135deg, #1e1e24, #121217, #08080a);
     color: white;
     display: flex;
     flex-direction: column;
@@ -252,7 +262,7 @@ button[type="submit"] {
     padding: 16px;
     border: none;
     border-radius: 12px;
-    background: linear-gradient(90deg, #ea0016, #d10000);
+    background: #007bc0;
     color: white;
     font-size: 16px;
     font-weight: 600;
@@ -265,7 +275,7 @@ button[type="submit"] {
 
 button[type="submit"]:hover {
     transform: translateY(-2px);
-    box-shadow: 0 12px 30px rgba(234,0,22,0.3);
+    box-shadow: 0 12px 30px rgba(0,123,192,0.3);
 }
 
 button[type="submit"]:active {

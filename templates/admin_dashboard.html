@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Admin Dashboard | SENTRYX</title>
+<meta name="description" content="SENTRYX Privacy and GDPR Compliance Dashboard. Review flagged files, manage retention policies, and exercise your data rights.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="/static/css/dashboard.css?v=3">
+
+<!-- Apply saved theme before paint to avoid flash -->
+<script>
+    if (localStorage.getItem("pg-theme") === "light") {
+        document.documentElement.style.background = "#f3f4f8";
+    }
+</script>
+</head>
+
+<body>
+
+<canvas id="particles"></canvas>
+
+<div class="topbar">
+
+    <div class="left-top">
+
+        <button id="menuToggle" class="menu-btn">
+            ☰
+        </button>
+
+        <span class="brand">
+            SENTRYX
+        </span>
+
+    </div>
+
+    <div class="topbar-right" style="display: flex; align-items: center; gap: 14px;">
+
+        <button class="menu-btn theme-toggle" id="themeToggleBtn" onclick="window.toggleDarkMode()" title="Toggle Theme" type="button"></button>
+
+        <div class="account">
+
+            <button class="account-btn" onclick="toggleAccountMenu()">
+
+                <div class="avatar-small">
+                    {{ user.first_name[0] }}{{ user.last_name[0] }}
+                </div>
+
+                <div class="account-info">
+                    <strong>{{ user.first_name }} {{ user.last_name }}</strong>
+                    <span>Employee</span>
+                </div>
+
+            </button>
+
+            <div class="account-menu" id="accountMenu">
+
+                <a href="#">
+                    My Profile
+                </a>
+
+                <a href="#">
+                    Switch User
+                </a>
+
+                <a href="/">
+                    Logout
+                </a>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="sidebar" id="sidebar">
+    <a href="{% if user and user.email == 'admin@bosch.com' %}/admin-dashboard{% else %}/employee-dashboard{% endif %}#profile" id="nav-profile">
+        <span class="icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+        </span>
+        <span class="label">Profile</span>
+    </a>
+    {% if user and user.email == 'admin@bosch.com' %}
+    <a href="/admin-dashboard#admin-overview" id="nav-admin-overview">
+        <span class="icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+        </span>
+        <span class="label">Organization KPIs</span>
+    </a>
+    {% endif %}
+    <a href="{% if user and user.email == 'admin@bosch.com' %}/admin-dashboard{% else %}/employee-dashboard{% endif %}#alerts" id="nav-alerts">
+        <span class="icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        </span>
+        <span class="label">Flagged Files</span>
+    </a>
+    <a href="{% if user and user.email == 'admin@bosch.com' %}/admin-dashboard{% else %}/employee-dashboard{% endif %}#overview" id="nav-overview">
+        <span class="icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+        </span>
+        <span class="label">Overview</span>
+    </a>
+    <a href="{% if user and user.email == 'admin@bosch.com' %}/admin-dashboard{% else %}/employee-dashboard{% endif %}#actions" id="nav-actions">
+        <span class="icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        </span>
+        <span class="label">Actions</span>
+    </a>
+    <a href="/data-points" id="nav-data-points">
+        <span class="icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        </span>
+        <span class="label">Data Points</span>
+    </a>
+    {% if user and user.email == 'admin@bosch.com' %}
+    <a href="/admin-database-explorer" id="nav-database-explorer">
+        <span class="icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </span>
+        <span class="label">Database Explorer</span>
+    </a>
+    {% else %}
+    <a href="/employee-directory" id="nav-employee-directory">
+        <span class="icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </span>
+        <span class="label">File Explorer</span>
+    </a>
+    {% endif %}
+</div>
+
+<div class="main">
+
+    <section class="hero reveal">
+
+        <h1>
+            Admin Control Panel
+        </h1>
+
+        <p>
+            Manage organization-wide GDPR compliance, oversee employee data, and review flagged files.
+        </p>
+
+    </section>
+
+    <section id="profile" class="glass-card profile-card reveal" style="margin-bottom: 40px;">
+        <div class="profile-left">
+            <div class="profile-avatar">
+                {{ user.first_name[0] }}{{ user.last_name[0] }}
+            </div>
+        </div>
+        <div class="profile-right">
+            <h2>{{ user.first_name }} {{ user.last_name }}</h2>
+            <p class="position">{{ user.department }}</p>
+            <div class="profile-grid">
+                <div>
+                    <span>Data Center Region</span>
+                    <strong>{{ user.location }}</strong>
+                </div>
+                <div>
+                    <span>Employee ID</span>
+                    <strong>{{ user.employee_id }}</strong>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="admin-overview" class="reveal" style="margin-bottom: 40px;">
+        <div class="section-header">
+            <h2>Organization KPIs</h2>
+        </div>
+        <div class="stats" style="margin-top: 0;">
+            <div class="glass-card stat-card" style="padding: 20px;">
+                <h3 id="kpi-total-files" style="font-size: 28px;">—</h3>
+                <span style="font-size: 11px;">Total Scanned Files</span>
+            </div>
+            <div class="glass-card stat-card" style="padding: 20px;">
+                <h3 id="kpi-total-size" style="font-size: 28px;">—</h3>
+                <span style="font-size: 11px;">Total Size (GB)</span>
+            </div>
+            <div class="glass-card stat-card" style="padding: 20px;">
+                <h3 id="kpi-findings" style="font-size: 28px;">—</h3>
+                <span style="font-size: 11px;">Files with Findings</span>
+            </div>
+        </div>
+    </section>
+
+    <section id="alerts" class="reveal">
+
+        <div class="section-header">
+
+            <h2>Recently Flagged Documents</h2>
+
+        </div>
+
+        <div class="alerts-grid">
+
+            <div class="glass-card alert-card">
+
+                <h3>passport.pdf</h3>
+
+                <p>Identity Document</p>
+
+                <span class="danger">
+                    Retention Expired
+                </span>
+
+            </div>
+
+            <div class="glass-card alert-card">
+
+                <h3>salary_2023.pdf</h3>
+
+                <p>Financial Data</p>
+
+                <span class="warning">
+                    Expiring Soon
+                </span>
+
+            </div>
+
+            <div class="glass-card alert-card">
+
+                <h3>contract_old.pdf</h3>
+
+                <p>Employment Data</p>
+
+                <span class="danger">
+                    Delete Candidate
+                </span>
+
+            </div>
+
+        </div>
+
+    </section>
+
+    <section id="overview" class="reveal">
+
+        <div class="section-header">
+
+            <h2>Data Overview</h2>
+
+        </div>
+
+        <div class="stats">
+
+            <a href="/data-points?filter=all" class="glass-card stat-card stat-link">
+                <h3 id="stat-total">—</h3>
+                <span>Total Files</span>
+            </a>
+
+            <a href="/data-points?filter=expiring" class="glass-card stat-card stat-link">
+                <h3 id="stat-expiring">—</h3>
+                <span>Expiring Soon</span>
+            </a>
+
+            <a href="/data-points?filter=delete" class="glass-card stat-card stat-link">
+                <h3 id="stat-delete">—</h3>
+                <span>Delete Candidates</span>
+            </a>
+
+            <a href="/data-points?filter=clean" class="glass-card stat-card stat-link">
+                <h3 id="stat-compliance">—</h3>
+                <span>Compliance Score</span>
+            </a>
+
+        </div>
+
+    </section>
+
+    <section id="actions" class="reveal">
+
+        <div class="section-header">
+
+            <h2>Quick Actions</h2>
+
+        </div>
+
+        <div class="action-grid">
+
+            <button class="action-btn">
+                Request Data Export
+            </button>
+
+            <button class="action-btn">
+                Request Deletion
+            </button>
+
+            <button class="action-btn">
+                Correct Information
+            </button>
+
+            <button class="action-btn">
+                Restrict Processing
+            </button>
+
+        </div>
+
+    </section>
+
+    <section class="glass-card explorer reveal">
+
+        <h2>
+            Explore Employee Database
+        </h2>
+
+        <p>
+            Search the entire organization to locate employee profiles, inspect file repositories, and review flagged content securely.
+        </p>
+
+        <button class="explore-btn" onclick="window.location.href='/admin-database-explorer'">
+
+            Open Database Explorer →
+
+        </button>
+
+    </section>
+
+</div>
+
+<script>
+
+// Global toggleAccountMenu and click-outside handler are now in dashboard.js
+
+// --- ADMIN SPECIFIC WIRING ---
+async function loadAdminKPIs() {
+    try {
+        const response = await fetch('/api/admin/kpis');
+        const data = await response.json();
+        document.getElementById('kpi-total-files').textContent = data.metrics.total_scanned_files;
+        document.getElementById('kpi-total-size').textContent = data.metrics.total_volume_gb;
+        document.getElementById('kpi-findings').textContent = data.metrics.total_flagged_files;
+    } catch(err) {
+        console.error("Error loading KPIs", err);
+    }
+}
+loadAdminKPIs();
+
+
+// When the page loads, fetch the real data from the Python API
+document.addEventListener("DOMContentLoaded", async () => {
+    // Jinja2 will replace this with the actual logged-in user's ID!
+    const employeeId = "{{ user.employee_id }}"; 
+    
+    try {
+        const response = await fetch(`/api/employee/files/${employeeId}`);
+        const data = await response.json();
+        
+        // Find the container where the cards live
+        const alertsGrid = document.querySelector('.alerts-grid');
+        
+        // Clear out the hardcoded dummy HTML cards
+        alertsGrid.innerHTML = ""; 
+        
+        // If the database is clean, show a success message
+        if (!data.findings || data.findings.length === 0) {
+            alertsGrid.innerHTML = "<p style='color: var(--text-secondary);'>No compliance violations found. Great job!</p>";
+            return;
+        }
+        
+        // Loop through the real database findings and generate the UI cards
+        data.findings.forEach(finding => {
+            const card = document.createElement('div');
+            card.className = 'glass-card alert-card';
+            
+            card.innerHTML = `
+                <h3 style="word-break: break-all;">${finding.file_name}</h3>
+                <p>${finding.category}</p>
+                <div style="margin-top: 10px; background: rgba(255,255,255,0.04); padding: 8px; border-radius: 6px; font-family: 'Space Grotesk', monospace; font-size: 13px; color: var(--text-secondary);">
+                    ${finding.flagged_snippet}
+                </div>
+                <button 
+                    onclick="handleDelete(${finding.finding_id})"
+                    style="margin-top: 15px; padding: 8px 16px; background: linear-gradient(90deg, #ea0016, #d10000); color: white; border: none; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px; transition: all 0.3s ease;">
+                    Resolve Issue
+                </button>
+            `;
+            alertsGrid.appendChild(card);
+        });
+        
+    } catch (error) {
+        console.error("Error fetching data from API:", error);
+    }
+});
+
+// Wiring up the 'Resolve' button to your /api/employee/action endpoint
+async function handleDelete(findingId) {
+    if(!confirm("Are you sure you want to mark this issue as resolved?")) return;
+    
+    try {
+        const response = await fetch('/api/employee/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file_id: findingId, action: "delete" })
+        });
+        
+        if(response.ok) {
+            window.location.reload(); 
+        }
+    } catch (error) {
+        alert("Failed to resolve issue.");
+    }
+}
+// --- Dynamic Data Overview Stats ---
+async function loadOverviewStats() {
+    const employeeId = "BX-21842";
+
+    try {
+        const response = await fetch(`/api/user-details/${employeeId}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const files = data.files || [];
+
+        const now = new Date();
+        const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+        let totalFiles = files.length;
+        let expiringSoon = 0;
+        let deleteCandidates = 0;
+        let cleanFiles = 0;
+
+        files.forEach(file => {
+            const deadline = new Date(file.retention_deadline);
+
+            if (deadline < now) {
+                deleteCandidates++;
+            }
+            else if (deadline >= now && deadline <= thirtyDaysFromNow) {
+                expiringSoon++;
+            }
+
+            if (!file.findings || file.findings.length === 0) {
+                cleanFiles++;
+            }
+        });
+
+        const complianceScore = totalFiles > 0
+            ? Math.round((cleanFiles / totalFiles) * 100)
+            : 100;
+
+        document.getElementById("stat-total").textContent = totalFiles;
+        document.getElementById("stat-expiring").textContent = expiringSoon;
+        document.getElementById("stat-delete").textContent = deleteCandidates;
+        document.getElementById("stat-compliance").textContent = complianceScore + "%";
+
+        const profileCompliance = document.querySelector(".profile-grid strong:last-child");
+        if (profileCompliance) {
+            profileCompliance.textContent = complianceScore + "%";
+        }
+
+    } catch (error) {
+        console.error("Error loading overview stats:", error);
+        ["stat-total", "stat-expiring", "stat-delete", "stat-compliance"].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = "N/A";
+        });
+    }
+}
+
+// Fire the overview stats fetch on page load
+loadOverviewStats();
+
+
+</script>
+<script src="/static/js/dashboard.js?v=3"></script>
+
+</body>
+</html>
