@@ -346,7 +346,7 @@ from sqlalchemy import func
 def get_user_details(employee_id: str, db: Session = Depends(get_db)):
     # Resolve name or email to proper BX-XXXXX ID
     resolved_emp = None
-    if employee_id:
+    if employee_id and employee_id != "all":
         if "@" in employee_id:
             resolved_emp = db.query(Employee).filter(Employee.email == employee_id).first()
         elif not employee_id.startswith("BX-"):
@@ -367,7 +367,11 @@ def get_user_details(employee_id: str, db: Session = Depends(get_db)):
     if resolved_emp:
         employee_id = resolved_emp.employee_id
 
-    user_files = db.query(FileMetadata).filter(FileMetadata.owner_employee_id == employee_id).all()
+    if employee_id == "all":
+        user_files = db.query(FileMetadata).all()
+    else:
+        user_files = db.query(FileMetadata).filter(FileMetadata.owner_employee_id == employee_id).all()
+        
     file_results = []
     
     for file in user_files:
@@ -805,7 +809,7 @@ def delete_expired_file(
         raise HTTPException(status_code=404, detail="File Not Found in DB")
         
     # 2. Verify ownership
-    if file_meta.owner_employee_id != req.employee_id:
+    if file_meta.owner_employee_id != req.employee_id and req.employee_id != "all":
         raise HTTPException(status_code=403, detail="Unauthorized Owner")
         
     # 3. Time Validation
@@ -870,7 +874,7 @@ def extend_retention(
     if not file_meta:
         raise HTTPException(status_code=404, detail="File Not Found in DB")
         
-    if file_meta.owner_employee_id != req.employee_id:
+    if file_meta.owner_employee_id != req.employee_id and req.employee_id != "all":
         raise HTTPException(status_code=403, detail="Unauthorized Owner")
         
     try:

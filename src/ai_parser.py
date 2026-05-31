@@ -70,10 +70,13 @@ Target Personal Data Types:
 - Driver’s license number
 - Travel history
 
-Violation Reason 1: Retention Period Exceeded. Contains personal data and the file's age or data storage duration exceeds the 3-year retention period.
-Violation Reason 2: Storage Limitation & Obsolete Data (Article 5). Contains obsolete data that is stored longer than needed.
-Violation Reason 3: Data Minimisation (Article 5). Processes or stores unnecessary personal data.
-Violation Reason 4: Right to Erasure (Article 17). Contains personal data belonging to an individual who has requested to have their personal data deleted by the organization.
+Violation Reason 1: Breach of Core Data Processing Principles (Article 5). E.g., Storage Limitation (storing personal data beyond the mandated 3-year retention period), Data Minimisation, Purpose Limitation, Accuracy.
+Violation Reason 2: Ignoring Data Subject Rights (Articles 12-22). E.g., Right to Erasure / Right to be Forgotten (Article 17), Right of Access & Portability, Right to Object.
+Violation Reason 3: Insufficient Data Security and Privacy by Design (Articles 25 & 32). E.g., Lack of Data Protection by Design, Security of Processing, Failure to Report Breaches.
+Violation Reason 4: Processing Without a Lawful Basis or Invalid Consent (Article 6). E.g., Invalid Consent, No Lawful Ground.
+Violation Reason 5: Unlawful Processing of Special Categories of Data (Article 9). E.g., Mishandling Sensitive Data like race, health, biometrics.
+Violation Reason 6: Unlawful International Data Transfers (Articles 44-49). E.g., Unsafe Third-Country Transfers.
+Violation Reason 7: Non-Compliance with Supervisory Authorities. E.g., Ignoring Directives.
 
 ## Document Types
 - expense_report: travel claims, receipts, reimbursement forms
@@ -106,7 +109,7 @@ Violation Reason 4: Right to Erasure (Article 17). Contains personal data belong
       "confidence": 0.98,
       "context": "Email address found in an expense report from 2018. Exceeds the 3-year retention period.",
       "recommended_action": "delete",
-      "violation_reason": "Violation Reason 1: Retention Period Exceeded",
+      "violation_reason": "Violation Reason 1: Breach of Core Data Processing Principles (Article 5)",
       "responsible_person": "Anna Schmidt"
     }
   ]

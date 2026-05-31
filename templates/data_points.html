@@ -231,7 +231,7 @@
     <div class="main" style="padding: 40px;">
         <header class="page-header reveal">
             <div>
-                <a href="/employee-dashboard" class="back-link">
+                <a href="{% if user and user.email == 'admin@bosch.com' %}/admin-dashboard{% else %}/employee-dashboard{% endif %}" class="back-link">
                     &larr; Back to Dashboard
                 </a>
                 <h1 id="page-title" style="margin-top: 1rem; background: var(--gradient-hero); background-size: 300% 300%; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; animation: gradientShift 8s ease infinite;">Loading Data Points...</h1>
@@ -258,7 +258,11 @@
             
             document.getElementById('page-title').textContent = titles[filter] || 'Data Points';
             
-            const employeeId = "{{ user.employee_id }}";
+            let employeeId = "{{ user.employee_id }}";
+            {% if user and user.email == 'admin@bosch.com' %}
+            employeeId = "all";
+            {% endif %}
+            
             const container = document.getElementById('data-points-container');
 
             try {
