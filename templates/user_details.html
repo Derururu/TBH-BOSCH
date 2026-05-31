@@ -405,13 +405,23 @@ function renderProfile(data) {
 
     filteredFiles.forEach(file => {
         const hasFindings = file.findings && file.findings.length > 0;
-        const cardStyle = hasFindings ? "border: 1px solid rgba(234,0,22,0.25);" : "";
-        const badgeHtml = hasFindings 
-            ? `<span style="font-size: 11px; margin-left:auto; padding:4px 12px; border-radius:12px; background: rgba(234,0,22,0.12); color: #ff4d6a; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">GDPR VIOLATION</span>` 
-            : `<span style="font-size: 11px; margin-left:auto; padding:4px 12px; border-radius:12px; background: rgba(16,185,129,0.12); color: #10b981; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">CLEAN</span>`;
         
+        let cardStyle = "";
+        let badgeHtml = "";
+        
+        if (hasFindings && file.expired) {
+            cardStyle = "border: 1px solid rgba(234,0,22,0.4); box-shadow: 0 4px 20px rgba(234,0,22,0.1);";
+            badgeHtml = `<span style="font-size: 11px; margin-left:auto; padding:4px 12px; border-radius:12px; background: rgba(234,0,22,0.12); color: #ff4d6a; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">GDPR VIOLATION</span>`;
+        } else if (hasFindings && !file.expired) {
+            cardStyle = "border: 1px solid rgba(245,158,11,0.4);";
+            badgeHtml = `<span style="font-size: 11px; margin-left:auto; padding:4px 12px; border-radius:12px; background: rgba(245,158,11,0.12); color: #f59e0b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">ACTIVE PII</span>`;
+        } else {
+            badgeHtml = `<span style="font-size: 11px; margin-left:auto; padding:4px 12px; border-radius:12px; background: rgba(16,185,129,0.12); color: #10b981; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">CLEAN</span>`;
+        }
+        
+        const cardId = `file-card-${file.file_id}`;
         html += `
-            <div class="glass-card data-card" style="${cardStyle}">
+            <div class="glass-card data-card" id="${cardId}" style="${cardStyle}">
                 <div style="display: flex; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px; margin-bottom: 10px;">
                     <h3 style="margin: 0; font-size: 16px;">
                         <span class="category-icon">📄</span> ${escapeHtml(file.file_name)}
@@ -426,13 +436,17 @@ function renderProfile(data) {
         `;
 
         if (hasFindings) {
-            html += `<div style="margin-top: 15px; border-top: 1px solid rgba(234,0,22,0.1); padding-top: 10px;">
-                        <strong style="color: #ff4d6a; font-size: 13px; display:block; margin-bottom:8px;">Flagged PII Data:</strong>`;
+            const sectionBorder = file.expired ? 'rgba(234,0,22,0.1)' : 'rgba(245,158,11,0.1)';
+            const titleColor = file.expired ? '#ff4d6a' : '#f59e0b';
+            
+            html += `<div style="margin-top: 15px; border-top: 1px solid ${sectionBorder}; padding-top: 10px;">
+                        <strong style="color: ${titleColor}; font-size: 13px; display:block; margin-bottom:8px;">Flagged PII Data:</strong>`;
             
             file.findings.forEach(finding => {
                 const icon = getCategoryIcon(finding.category);
+                const borderColor = file.expired ? 'var(--accent-red)' : '#f59e0b';
                 html += `
-                    <div style="background: var(--bg-card-hover); padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid var(--accent-red);">
+                    <div style="background: var(--bg-card-hover); padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid ${borderColor};">
                         <div style="font-weight: 600; font-size: 13px; margin-bottom: 4px; color: var(--text-primary);">${icon} ${finding.category || "Uncategorized"}</div>
                         <div class="data-snippet" style="border-left: none; padding: 8px; font-size: 12px; margin-bottom: 6px;">${finding.flagged_snippet || "N/A"}</div>
                         <div class="data-reasoning" style="font-size: 12px;">${finding.reasoning || "No reasoning provided."}</div>
@@ -441,6 +455,23 @@ function renderProfile(data) {
             });
             
             html += `</div>`;
+        }
+
+        if (file.expired) {
+            html += `
+                <div style="margin-top: 15px; border-top: 1px solid rgba(234,0,22,0.1); padding-top: 15px; display: flex; gap: 10px;">
+                    <button 
+                        onclick="handleExtendRetention('${file.file_id}', '${employeeId}', '${cardId}')"
+                        style="flex: 1; padding: 8px 16px; background: rgba(0,0,0,0.05); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px; transition: all 0.3s ease;">
+                        Extend Retention
+                    </button>
+                    <button 
+                        onclick="handleDeleteExpired('${file.file_id}', '${employeeId}', '${cardId}')"
+                        style="flex: 1; padding: 8px 16px; background: linear-gradient(90deg, #ea0016, #b00010); color: white; border: none; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13px; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(234,0,22,0.2);">
+                        ⚠️ Delete File (Permanent)
+                    </button>
+                </div>
+            `;
         }
 
         html += `</div>`; // Close card
@@ -503,6 +534,82 @@ function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Permanent physical deletion endpoint call
+async function handleDeleteExpired(fileId, employeeId, cardElementId) {
+    const isConfirmed = await window.customConfirm("Are you sure you want to PERMANENTLY delete this file from the OS disk and database? This action is irreversible.");
+    if (!isConfirmed) return;
+    
+    try {
+        const response = await fetch(`/api/employee/files/${fileId}/delete-expired`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employee_id: employeeId })
+        });
+        
+        let errorDetail = "Unknown error";
+        try {
+            const data = await response.json();
+            if (data) {
+                if (typeof data.detail === 'string') {
+                    errorDetail = data.detail;
+                } else if (Array.isArray(data.detail)) {
+                    errorDetail = data.detail.map(err => err.msg).join(', ');
+                } else if (data.message) {
+                    errorDetail = data.message;
+                }
+            }
+        } catch (e) {
+            // response was not JSON or parsing failed
+        }
+        
+        if(response.ok) {
+            alert("File permanently deleted and findings updated successfully!");
+            const element = document.getElementById(cardElementId);
+            if (element) {
+                element.remove();
+            } else {
+                console.warn(`Element with ID ${cardElementId} not found in DOM`);
+            }
+        } else {
+            alert("Failed to delete expired file: " + errorDetail);
+        }
+    } catch (error) {
+        alert("Failed to delete expired file due to connection error: " + error.message);
+    }
+}
+
+async function handleExtendRetention(fileId, employeeId, cardElementId) {
+    const isConfirmed = await window.customConfirm("Are you sure you want to request a 90-day retention extension for this data under GDPR laws?");
+    if (!isConfirmed) return;
+    
+    try {
+        const response = await fetch(`/api/employee/files/${fileId}/extend-retention`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employee_id: employeeId })
+        });
+        
+        let errorDetail = "Unknown error";
+        try {
+            const data = await response.json();
+            if (data) {
+                if (typeof data.detail === 'string') errorDetail = data.detail;
+                else if (Array.isArray(data.detail)) errorDetail = data.detail.map(err => err.msg).join(', ');
+                else if (data.message) errorDetail = data.message;
+            }
+        } catch (e) {}
+        
+        if(response.ok) {
+            alert("Data retention extended by 90 days successfully.");
+            window.location.reload();
+        } else {
+            alert("Failed to extend retention: " + errorDetail);
+        }
+    } catch (error) {
+        alert("Failed to extend retention due to connection error: " + error.message);
+    }
 }
 
 // Initialize

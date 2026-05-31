@@ -317,22 +317,52 @@ def get_user_details(employee_id: str, db: Session = Depends(get_db)):
         # Defensively handle SQLite date strings vs objects
         ret_deadline = file.retention_deadline
         ret_deadline_str = None
+        is_expired = False
+        
         if ret_deadline:
             if isinstance(ret_deadline, str):
                 ret_deadline_str = ret_deadline
+                try:
+                    from datetime import datetime
+                    parsed_deadline = datetime.fromisoformat(ret_deadline)
+                    if parsed_deadline.tzinfo is not None:
+                        parsed_deadline = parsed_deadline.replace(tzinfo=None)
+                    is_expired = parsed_deadline < datetime.now()
+                except ValueError:
+                    pass
             else:
                 try:
                     ret_deadline_str = ret_deadline.isoformat()
+                    from datetime import datetime
+                    parsed_deadline = ret_deadline
+                    if isinstance(parsed_deadline, datetime) and parsed_deadline.tzinfo is not None:
+                        parsed_deadline = parsed_deadline.replace(tzinfo=None)
+                    is_expired = parsed_deadline < datetime.now()
                 except Exception:
                     ret_deadline_str = str(ret_deadline)
         
         file_path = getattr(file, "file_path", "")
         file_name = file_path.split("/")[-1] if "/" in file_path else file_path.split("\\")[-1]
         
+        last_mod = getattr(file, "last_modified", None)
+        last_mod_str = None
+        if last_mod:
+            if isinstance(last_mod, str):
+                last_mod_str = last_mod
+            else:
+                try:
+                    last_mod_str = last_mod.isoformat()
+                except Exception:
+                    last_mod_str = str(last_mod)
+        
         file_results.append({
             "file_id": str(file.id),
             "file_name": file_name,
+            "file_path": file_path,
+            "size_bytes": getattr(file, "size_bytes", 0) or 0,
+            "last_modified": last_mod_str,
             "retention_deadline": ret_deadline_str,
+            "expired": is_expired,
             "findings": findings_list
         })
 
@@ -386,13 +416,17 @@ def get_admin_kpis(db: Session = Depends(get_db)):
 from pydantic import BaseModel
 from typing import List
 
+from typing import Union
+
 # We create a simple data model for what the frontend expects
 class ActionRequest(BaseModel):
-    file_id: int
+    file_id: Union[int, str]
     action: str  # e.g., "delete" or "false_positive"
 
 @app.get("/api/employee/files/{employee_id}")
 def get_employee_files(employee_id: str, db: Session = Depends(get_db)):
+    from datetime import datetime
+    
     # 1. Find all files owned by this specific employee
     user_files = db.query(FileMetadata).filter(FileMetadata.owner_employee_id == employee_id).all()
     user_file_ids = [f.id for f in user_files]
@@ -412,13 +446,29 @@ def get_employee_files(employee_id: str, db: Session = Depends(get_db)):
         # We need the file name to show the user which file has the issue
         file_record = db.query(FileMetadata).filter(FileMetadata.id == finding.file_id).first()
         
+        # Calculate if file's retention deadline has expired
+        retention_deadline = file_record.retention_deadline
+        is_expired = False
+        if retention_deadline:
+            if isinstance(retention_deadline, str):
+                try:
+                    retention_deadline = datetime.fromisoformat(retention_deadline)
+                except ValueError:
+                    pass
+            if isinstance(retention_deadline, datetime):
+                if retention_deadline.tzinfo is not None:
+                    retention_deadline = retention_deadline.replace(tzinfo=None)
+                is_expired = retention_deadline < datetime.now()
+        
         results.append({
             "finding_id": finding.id,
+            "file_id": file_record.id,
             "file_name": file_record.file_path.split("\\")[-1] if "\\" in file_record.file_path else file_record.file_path.split("/")[-1],
             "category": finding.category,
             "flagged_snippet": finding.flagged_snippet, # UNMASKED: The employee is allowed to see their own data
             "reasoning": finding.reasoning,
-            "urgency": "Action Required" # You can tie this to the retention_deadline later
+            "expired": is_expired,
+            "urgency": "IMMEDIATE DELETION REQUIRED" if is_expired else "Action Required"
         })
         
     return {"findings": results}
@@ -431,14 +481,118 @@ def get_employee_files(employee_id: str, db: Session = Depends(get_db)):
 
 @app.post("/api/employee/action")
 def process_employee_action(request: ActionRequest, db: Session = Depends(get_db)):
-    # This will handle the button clicks from the frontend
-    finding = db.query(Finding).filter(Finding.id == request.file_id).first()
+    # Query defensively by both auto-increment id and finding_uid (string UUID)
+    finding = None
+    if isinstance(request.file_id, int) or (isinstance(request.file_id, str) and request.file_id.isdigit()):
+        finding = db.query(Finding).filter(Finding.id == int(request.file_id)).first()
+    
+    if not finding:
+        finding = db.query(Finding).filter(Finding.finding_uid == str(request.file_id)).first()
+        
     if finding:
         finding.status = "Completed - Deleted"
         finding.owner_resolved = True
         db.commit()
-    return {"status": "success", "message": f"Processed {request.action} on file {request.file_id}"}
+        return {"status": "success", "message": f"Processed {request.action} on finding {request.file_id}"}
+        
+    from fastapi import HTTPException
+    raise HTTPException(status_code=404, detail=f"Finding {request.file_id} not found")
 
+
+class DeleteExpiredRequest(BaseModel):
+    employee_id: str
+
+@app.post("/api/employee/files/{file_id}/delete-expired")
+def delete_expired_file(
+    file_id: int,
+    req: DeleteExpiredRequest,
+    db: Session = Depends(get_db)
+):
+    from fastapi import HTTPException
+    import os
+    from datetime import datetime
+    
+    # 1. Fetch file metadata
+    file_meta = db.query(FileMetadata).filter(FileMetadata.id == file_id).first()
+    if not file_meta:
+        raise HTTPException(status_code=404, detail="File Not Found in DB")
+        
+    # 2. Verify ownership
+    if file_meta.owner_employee_id != req.employee_id:
+        raise HTTPException(status_code=403, detail="Unauthorized Owner")
+        
+    # 3. Time Validation
+    # Parse retention_deadline if it's a string (defensive check)
+    retention_deadline = file_meta.retention_deadline
+    if isinstance(retention_deadline, str):
+        try:
+            retention_deadline = datetime.fromisoformat(retention_deadline)
+        except ValueError:
+            # Fallback parsing
+            pass
+            
+    if isinstance(retention_deadline, datetime) and retention_deadline.tzinfo is not None:
+        retention_deadline = retention_deadline.replace(tzinfo=None)
+            
+    if not retention_deadline or retention_deadline > datetime.now():
+        raise HTTPException(status_code=400, detail="File retention deadline has not expired yet")
+        
+    # 4. Physical Deletion
+    file_path = file_meta.file_path
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except FileNotFoundError:
+        pass # Gracefully handle if already manually removed
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OS Deletion Error: {str(e)}")
+        
+    # 5. Database Updates
+    try:
+        # Update associated Findings
+        findings = db.query(Finding).filter(Finding.file_id == file_id).all()
+        for finding in findings:
+            finding.status = "Completed - Deleted"
+            finding.owner_resolved = True
+            
+        # Update FileMetadata
+        file_meta.file_path = f"[DELETED] {file_path}"
+        
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database Update Error: {str(e)}")
+        
+    return {"status": "success", "message": f"File {file_id} deleted successfully"}
+
+class ExtendRetentionRequest(BaseModel):
+    employee_id: str
+
+@app.post("/api/employee/files/{file_id}/extend-retention")
+def extend_retention(
+    file_id: int,
+    req: ExtendRetentionRequest,
+    db: Session = Depends(get_db)
+):
+    from fastapi import HTTPException
+    from datetime import datetime, timedelta
+    
+    file_meta = db.query(FileMetadata).filter(FileMetadata.id == file_id).first()
+    if not file_meta:
+        raise HTTPException(status_code=404, detail="File Not Found in DB")
+        
+    if file_meta.owner_employee_id != req.employee_id:
+        raise HTTPException(status_code=403, detail="Unauthorized Owner")
+        
+    try:
+        # Extend retention by 90 days from now
+        file_meta.retention_deadline = datetime.now() + timedelta(days=90)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database Update Error: {str(e)}")
+        
+    return {"status": "success", "message": f"Retention extended successfully for file {file_id}"}
 
 from pydantic import BaseModel as PydanticBaseModel
 

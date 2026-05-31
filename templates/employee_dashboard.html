@@ -325,18 +325,49 @@ document.addEventListener("DOMContentLoaded", async () => {
         data.findings.forEach(finding => {
             const card = document.createElement('div');
             card.className = 'glass-card alert-card';
+            const cardId = `finding-card-${finding.file_id}`;
+            card.id = cardId;
+            
+            let actionButton = '';
+            let statusBadge = '';
+            
+            if (finding.expired) {
+                statusBadge = `<span style="font-size: 11px; padding: 4px 8px; border-radius: 6px; background: rgba(234,0,22,0.15); color: #ff4d6a; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">RETENTION EXPIRED</span>`;
+                actionButton = `
+                    <div style="margin-top: 15px; display: flex; gap: 10px;">
+                        <button 
+                            onclick="handleExtendRetention('${finding.file_id}', '${employeeId}', '${cardId}')"
+                            style="flex: 1; padding: 8px 16px; background: rgba(0,0,0,0.05); color: var(--text-primary); border: 1px solid var(--border-subtle); border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px; transition: all 0.3s ease;">
+                            Extend Retention
+                        </button>
+                        <button 
+                            onclick="handleDeleteExpired('${finding.file_id}', '${employeeId}', '${cardId}')"
+                            style="flex: 1; padding: 8px 16px; background: linear-gradient(90deg, #ea0016, #b00010); color: white; border: none; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13px; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(234,0,22,0.2);">
+                            ⚠️ Delete File
+                        </button>
+                    </div>
+                `;
+            } else {
+                statusBadge = `<span style="font-size: 11px; padding: 4px 8px; border-radius: 6px; background: rgba(245,158,11,0.15); color: #f59e0b; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">ACTIVE PII</span>`;
+                actionButton = `
+                    <button 
+                        onclick="handleDelete('${finding.finding_id}')"
+                        style="margin-top: 15px; padding: 8px 16px; background: linear-gradient(90deg, #3b82f6, #1d4ed8); color: white; border: none; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px; transition: all 0.3s ease;">
+                        Resolve Issue
+                    </button>
+                `;
+            }
             
             card.innerHTML = `
-                <h3 style="word-break: break-all;">${finding.file_name}</h3>
-                <p>${finding.category}</p>
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                    <h3 style="word-break: break-all; margin: 0; font-size: 16px;">${finding.file_name}</h3>
+                    ${statusBadge}
+                </div>
+                <p style="margin-top: 4px;">${finding.category}</p>
                 <div style="margin-top: 10px; background: rgba(255,255,255,0.04); padding: 8px; border-radius: 6px; font-family: 'Space Grotesk', monospace; font-size: 13px; color: var(--text-secondary);">
                     ${finding.flagged_snippet}
                 </div>
-                <button 
-                    onclick="handleDelete(${finding.finding_id})"
-                    style="margin-top: 15px; padding: 8px 16px; background: linear-gradient(90deg, #ea0016, #d10000); color: white; border: none; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px; transition: all 0.3s ease;">
-                    Resolve Issue
-                </button>
+                ${actionButton}
             `;
             alertsGrid.appendChild(card);
         });
@@ -346,9 +377,86 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 });
 
+// Permanent physical deletion endpoint call
+async function handleDeleteExpired(fileId, employeeId, cardElementId) {
+    const isConfirmed = await window.customConfirm("Are you sure you want to PERMANENTLY delete this file from the OS disk and database? This action is irreversible.");
+    if (!isConfirmed) return;
+    
+    try {
+        const response = await fetch(`/api/employee/files/${fileId}/delete-expired`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employee_id: employeeId })
+        });
+        
+        let errorDetail = "Unknown error";
+        try {
+            const data = await response.json();
+            if (data) {
+                if (typeof data.detail === 'string') {
+                    errorDetail = data.detail;
+                } else if (Array.isArray(data.detail)) {
+                    errorDetail = data.detail.map(err => err.msg).join(', ');
+                } else if (data.message) {
+                    errorDetail = data.message;
+                }
+            }
+        } catch (e) {
+            // response was not JSON or parsing failed
+        }
+        
+        if(response.ok) {
+            alert("File permanently deleted and findings updated successfully!");
+            const element = document.getElementById(cardElementId);
+            if (element) {
+                element.remove();
+            } else {
+                console.warn(`Element with ID ${cardElementId} not found in DOM`);
+            }
+        } else {
+            alert("Failed to delete expired file: " + errorDetail);
+        }
+    } catch (error) {
+        alert("Failed to delete expired file due to connection error: " + error.message);
+    }
+}
+
+async function handleExtendRetention(fileId, employeeId, cardElementId) {
+    const isConfirmed = await window.customConfirm("Are you sure you want to request a 90-day retention extension for this data under GDPR laws?");
+    if (!isConfirmed) return;
+    
+    try {
+        const response = await fetch(`/api/employee/files/${fileId}/extend-retention`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employee_id: employeeId })
+        });
+        
+        let errorDetail = "Unknown error";
+        try {
+            const data = await response.json();
+            if (data) {
+                if (typeof data.detail === 'string') errorDetail = data.detail;
+                else if (Array.isArray(data.detail)) errorDetail = data.detail.map(err => err.msg).join(', ');
+                else if (data.message) errorDetail = data.message;
+            }
+        } catch (e) {}
+        
+        if(response.ok) {
+            alert("Data retention extended by 90 days successfully.");
+            window.location.reload();
+        } else {
+            alert("Failed to extend retention: " + errorDetail);
+        }
+    } catch (error) {
+        alert("Failed to extend retention due to connection error: " + error.message);
+    }
+}
+
 // Wiring up the 'Resolve' button to your /api/employee/action endpoint
 async function handleDelete(findingId) {
-    if(!confirm("Are you sure you want to mark this issue as resolved?")) return;
+    const isConfirmed = await window.customConfirm("Are you sure you want to mark this issue as resolved?");
+    if (!isConfirmed) return;
     
     try {
         const response = await fetch('/api/employee/action', {

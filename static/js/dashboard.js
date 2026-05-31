@@ -272,3 +272,70 @@ function initParticles() {
 
     animate();
 }
+
+/* =========================================
+   CUSTOM NATIVE DIALOG CONFIRM
+   Replaces browser default confirm() using <dialog>
+   ========================================= */
+window.customConfirm = function(message) {
+    return new Promise((resolve) => {
+        const dialog = document.createElement('dialog');
+        dialog.setAttribute('closedby', 'any'); // enable light dismiss
+        dialog.style.border = '1px solid var(--border-subtle, rgba(255,255,255,0.1))';
+        dialog.style.borderRadius = '16px';
+        dialog.style.padding = '24px';
+        
+        // Adaptive styling based on theme
+        const isLight = document.body.classList.contains('light');
+        dialog.style.background = isLight ? '#ffffff' : '#1e1e2e';
+        dialog.style.color = isLight ? '#111827' : '#f3f4f6';
+        dialog.style.boxShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.25)';
+        dialog.style.maxWidth = '400px';
+        dialog.style.width = '90%';
+        dialog.style.margin = 'auto';
+        dialog.style.backdropFilter = 'blur(10px)';
+        
+        dialog.classList.add('custom-confirm-dialog');
+        
+        // CSS for ::backdrop injected locally to dialog
+        const style = document.createElement('style');
+        style.innerHTML = `
+            dialog.custom-confirm-dialog::backdrop {
+                background: rgba(0, 0, 0, 0.6);
+                backdrop-filter: blur(4px);
+            }
+        `;
+        document.head.appendChild(style);
+
+        dialog.innerHTML = `
+            <form method="dialog">
+                <h3 style="margin-top: 0; margin-bottom: 12px; font-size: 18px; display: flex; align-items: center; gap: 8px; font-family: 'Space Grotesk', sans-serif;">
+                    ⚠️ Confirm Action
+                </h3>
+                <p style="margin-bottom: 24px; font-size: 14px; color: ${isLight ? '#4b5563' : '#9ca3af'}; line-height: 1.5; font-family: 'Inter', sans-serif;">
+                    ${message}
+                </p>
+                <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                    <button value="cancel" type="button" id="confirm-cancel-btn" style="padding: 8px 16px; border-radius: 8px; border: 1px solid ${isLight ? '#d1d5db' : '#4b5563'}; background: transparent; color: inherit; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 500; transition: background 0.2s;">Cancel</button>
+                    <button value="confirm" style="padding: 8px 16px; border-radius: 8px; border: none; background: linear-gradient(90deg, #ea0016, #b00010); color: white; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; box-shadow: 0 4px 12px rgba(234,0,22,0.2); transition: transform 0.2s;">Confirm</button>
+                </div>
+            </form>
+        `;
+        
+        document.body.appendChild(dialog);
+        
+        const cancelBtn = dialog.querySelector('#confirm-cancel-btn');
+        cancelBtn.addEventListener('click', () => {
+            dialog.close('cancel');
+        });
+
+        dialog.addEventListener('close', () => {
+            document.body.removeChild(dialog);
+            // Cleanup the injected style element to prevent clutter
+            document.head.removeChild(style);
+            resolve(dialog.returnValue === 'confirm');
+        });
+        
+        dialog.showModal();
+    });
+};
