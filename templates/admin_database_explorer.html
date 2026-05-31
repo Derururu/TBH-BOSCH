@@ -1166,8 +1166,11 @@ function renderEmployeeDetail(emp, data) {
                         <div class="file-path">${escapeHtml(file.file_path)} · ${sizeKB} KB</div>
                     </div>
                     <div class="file-badges">
-                        ${hasFindings ? `
-                            <span class="badge violation">GDPR Violation</span>
+                        ${hasFindings && file.expired ? `
+                            <span class="badge violation" style="background: rgba(234,0,22,0.12); color: #ff4d6a;">GDPR Violation</span>
+                            <span class="badge findings-count">${file.findings.length} finding${file.findings.length > 1 ? 's' : ''}</span>
+                        ` : hasFindings && !file.expired ? `
+                            <span class="badge warning" style="background: rgba(245,158,11,0.12); color: #f59e0b;">Active PII</span>
                             <span class="badge findings-count">${file.findings.length} finding${file.findings.length > 1 ? 's' : ''}</span>
                         ` : `
                             <span class="badge clean">Clean</span>

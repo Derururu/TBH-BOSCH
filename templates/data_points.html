@@ -143,6 +143,21 @@
             gap: 8px;
             margin-top: 0.75rem;
         }
+
+        .title-loaded {
+            margin-top: 1rem;
+            background: linear-gradient(to right, #ea0016 0%, #ff4d6a 15%, #007bc0 30%, #00c2ff 45%, var(--accent-blue) 60%, var(--accent-blue) 100%);
+            background-size: 300% 100%;
+            -webkit-background-clip: text !important;
+            -webkit-text-fill-color: transparent !important;
+            background-clip: text !important;
+            animation: fillBlueFromRight 2.5s ease-out forwards !important;
+        }
+
+        @keyframes fillBlueFromRight {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 100% 50%; }
+        }
     </style>
 </head>
 <body>
@@ -359,6 +374,13 @@
                         Failed to load data points. Please try again later.
                     </div>
                 `;
+            }
+
+            // Transition the title color to blue once loading is complete
+            const pageTitle = document.getElementById('page-title');
+            if (pageTitle) {
+                pageTitle.style.cssText = '';
+                pageTitle.className = 'title-loaded';
             }
         }
 
