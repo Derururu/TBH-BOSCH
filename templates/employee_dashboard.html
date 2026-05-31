@@ -159,6 +159,8 @@
 
     </section>
 
+    {% include 'gdpr_modal_snippet.html' %}
+
     <section id="profile" class="glass-card profile-card reveal full-page-section">
 
         <div class="profile-left">
@@ -577,16 +579,17 @@ async function loadOverviewStats() {
         const expiredFiles = [];
 
         files.forEach(file => {
-            // 1. Calculate Date Math safely
-            if (file.retention_deadline) {
+            // 1. Calculate Date Math safely using backend 'expired' flag
+            if (file.expired) {
+                deleteCandidates++;
+                // Only prompt the user to purge files that are BOTH expired AND flagged as PII
+                if (file.findings && file.findings.length > 0) {
+                    expiredFiles.push(file);
+                }
+            } else if (file.retention_deadline) {
                 const deadline = new Date(file.retention_deadline);
-                if (!isNaN(deadline)) {
-                    if (deadline < now) {
-                        deleteCandidates++;
-                        expiredFiles.push(file);
-                    } else if (deadline >= now && deadline <= thirtyDaysFromNow) {
-                        expiringSoon++;
-                    }
+                if (!isNaN(deadline) && deadline <= thirtyDaysFromNow) {
+                    expiringSoon++;
                 }
             }
 
@@ -600,10 +603,15 @@ async function loadOverviewStats() {
         document.getElementById("stat-expiring").textContent = expiringSoon;
         document.getElementById("stat-delete").textContent = deleteCandidates;
         document.getElementById("stat-flagged").textContent = flaggedFiles;
+        
+        // Ensure complianceScore exists (it might be handled asynchronously elsewhere)
         const profileCompliance = document.getElementById("profile-compliance");
-        if (profileCompliance) profileCompliance.textContent = complianceScore + "%";
+        if (profileCompliance && typeof complianceScore !== 'undefined') {
+            profileCompliance.textContent = complianceScore + "%";
+        }
 
-        if (deleteCandidates > 0 && typeof triggerGdprModal === 'function') {
+        // Trigger GDPR modal specifically for EXPIRED FLAGGED files
+        if (expiredFiles.length > 0 && typeof triggerGdprModal === 'function') {
             triggerGdprModal(employeeId, expiredFiles);
         }
 
@@ -744,7 +752,6 @@ async function markNotifRead(notifId, el) {
 </script>
 <script src="/static/js/dashboard.js?v=6"></script>
 
-{% include 'gdpr_modal_snippet.html' %}
 
 </body>
 </html>

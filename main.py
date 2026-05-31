@@ -457,25 +457,35 @@ def get_user_details(employee_id: str, db: Session = Depends(get_db)):
 def get_admin_kpis(db: Session = Depends(get_db)):
     from datetime import datetime, timedelta
     
-    # 1. Total files scanned
-    total_files = db.query(FileMetadata).count()
+    # 1. Fetch all files and filter out deleted ones
+    all_files = db.query(FileMetadata).all()
+    active_files = [f for f in all_files if not getattr(f, "file_path", "").startswith("[DELETED]")]
+    
+    total_files = len(active_files)
     
     # 2. Total data volume in bytes, converted to GB
-    total_bytes = db.query(func.sum(FileMetadata.size_bytes)).scalar() or 0
+    total_bytes = sum(getattr(f, "size_bytes", 0) or 0 for f in active_files)
     total_volume_gb = round(total_bytes / (1024 ** 3), 4) # Convert bytes to GB
     
-    # 3. Total files with findings (using distinct to count each file only once)
-    flagged_files = db.query(func.count(func.distinct(Finding.file_id))).scalar() or 0
+    # 3. Total files with findings
+    active_file_ids = [f.id for f in active_files]
+    if active_file_ids:
+        flagged_files = db.query(func.count(func.distinct(Finding.file_id))).filter(
+            Finding.file_id.in_(active_file_ids),
+            Finding.status != 'deleted', 
+            Finding.review_status != 'deleted'
+        ).scalar() or 0
+    else:
+        flagged_files = 0
     
     # 4. Expiration stats
     now = datetime.now()
     thirty_days = now + timedelta(days=30)
     
-    all_files = db.query(FileMetadata).all()
     expiring_soon = 0
     delete_candidates = 0
     
-    for f in all_files:
+    for f in active_files:
         deadline = f.retention_deadline
         if deadline:
             if isinstance(deadline, str):
@@ -541,7 +551,7 @@ def search_employees(q: str, db: Session = Depends(get_db)):
             Employee,
             func.count(FileMetadata.id).label("file_count"),
         )
-        .outerjoin(FileMetadata, FileMetadata.owner_employee_id == Employee.employee_id)
+        .outerjoin(FileMetadata, (FileMetadata.owner_employee_id == Employee.employee_id) & ~FileMetadata.file_path.startswith("[DELETED]"))
         .filter(
             or_(
                 func.lower(Employee.first_name).like(q_lower),
@@ -564,12 +574,14 @@ def search_employees(q: str, db: Session = Depends(get_db)):
         if file_count > 0:
             emp_file_ids = [
                 f.id for f in db.query(FileMetadata.id)
-                .filter(FileMetadata.owner_employee_id == emp.employee_id)
+                .filter(FileMetadata.owner_employee_id == emp.employee_id, ~FileMetadata.file_path.startswith("[DELETED]"))
                 .all()
             ]
             if emp_file_ids:
                 findings_count = db.query(Finding).filter(
-                    Finding.file_id.in_(emp_file_ids)
+                    Finding.file_id.in_(emp_file_ids),
+                    Finding.status != 'deleted',
+                    Finding.review_status != 'deleted'
                 ).count()
 
         results.append({
@@ -1453,6 +1465,8 @@ def get_compliance_score(employee_id: str, db: Session = Depends(get_db)):
     files = db.query(FileMetadata).filter(
         FileMetadata.owner_employee_id == employee_id
     ).all()
+    
+    files = [f for f in files if not getattr(f, "file_path", "").startswith("[DELETED]")]
 
     total_files = len(files)
     expired_count = 0

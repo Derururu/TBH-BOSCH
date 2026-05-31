@@ -1,127 +1,105 @@
 <style>
     /* Soft accent color (Warm Coral) */
     :root {
-        --modal-bg: rgba(255, 255, 255, 0.85);
+        --card-bg: rgba(255, 255, 255, 0.85);
         --primary-accent: #f87171; 
         --primary-accent-hover: #ef4444;
         --primary-accent-shadow: rgba(248, 113, 113, 0.35);
         --secondary-border: #cbd5e1;
         --secondary-hover-bg: #f1f5f9;
-        --backdrop-bg: rgba(241, 245, 249, 0.65);
-        --modal-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.08), 0 0 20px 0 rgba(15, 23, 42, 0.04);
-        --modal-blur: 16px;
+        --card-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -1px rgba(15, 23, 42, 0.03);
+        --card-blur: 16px;
     }
 
-    /* --- Modal Backdrop --- */
-    .modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: var(--backdrop-bg);
-        backdrop-filter: blur(6px);
-        -webkit-backdrop-filter: blur(6px);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-        
-        /* Gentle fade-in */
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.6s ease;
-    }
-
-    .modal-overlay.active {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
-    /* --- Modal Card --- */
-    .modal-card {
-        background: var(--modal-bg);
-        backdrop-filter: blur(var(--modal-blur));
-        -webkit-backdrop-filter: blur(var(--modal-blur));
+    /* --- GDPR Section (Inline Dashboard Widget) --- */
+    .gdpr-section {
+        background: var(--card-bg);
+        backdrop-filter: blur(var(--card-blur));
+        -webkit-backdrop-filter: blur(var(--card-blur));
         border: 1px solid rgba(255, 255, 255, 0.7);
-        border-radius: 24px;
-        width: 90%;
-        max-width: 480px;
-        padding: 3rem 2.5rem;
-        box-shadow: var(--modal-shadow);
-        text-align: center;
-        
-        /* Smooth lift/scale animation */
-        transform: translateY(20px) scale(0.98);
-        transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease;
+        border-radius: 16px;
+        width: 100%;
+        margin: 0 0 40px 0;
+        padding: 1.5rem 2rem;
+        box-shadow: var(--card-shadow);
+        display: none; /* Hidden by default */
+        align-items: center;
+        gap: 1.5rem;
+        transition: opacity 0.4s ease;
         opacity: 0;
     }
 
-    .modal-overlay.active .modal-card {
-        transform: translateY(0) scale(1);
-        opacity: 1;
+    @media (max-width: 768px) {
+        .gdpr-section {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 1.5rem;
+        }
     }
 
     /* Soft Icon/Graphic Container */
-    .modal-icon {
-        width: 64px;
-        height: 64px;
-        margin: 0 auto 1.5rem;
+    .section-icon {
+        width: 50px;
+        height: 50px;
         background: rgba(248, 113, 113, 0.1);
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         color: var(--primary-accent);
+        flex-shrink: 0;
     }
 
-    .modal-icon svg {
-        width: 32px;
-        height: 32px;
+    .section-icon svg {
+        width: 24px;
+        height: 24px;
     }
 
     /* Typography */
-    .modal-title {
-        font-size: 1.5rem;
-        font-weight: 600;
-        margin-bottom: 1rem;
-        letter-spacing: -0.02em;
-        color: #1e293b;
+    .section-content {
+        flex-grow: 1;
     }
 
-    .modal-description {
-        font-size: 1rem;
-        line-height: 1.6;
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+        letter-spacing: -0.01em;
+        color: var(--text-primary);
+    }
+
+    .section-description {
+        font-size: 0.95rem;
+        line-height: 1.5;
         color: var(--text-muted);
-        margin-bottom: 2.5rem;
-        padding: 0 0.5rem;
     }
     
     .highlight-count {
         font-weight: 600;
-        color: #1e293b;
+        color: var(--text-primary);
     }
 
     /* Action Buttons */
-    .modal-actions {
+    .section-actions {
         display: flex;
-        gap: 1rem;
-        flex-direction: column;
+        gap: 0.75rem;
+        flex-shrink: 0;
     }
 
-    @media (min-width: 480px) {
-        .modal-actions {
-            flex-direction: row;
+    @media (max-width: 768px) {
+        .section-actions {
+            width: 100%;
+            margin-top: 0.5rem;
         }
-        .btn {
+        .section-btn {
             flex: 1;
         }
     }
 
-    .btn {
-        padding: 0.875rem 1.5rem;
-        border-radius: 12px;
-        font-size: 1rem;
+    .section-btn {
+        padding: 0.6rem 1.25rem;
+        border-radius: 10px;
+        font-size: 0.95rem;
         font-weight: 500;
         cursor: pointer;
         transition: all 0.25s ease;
@@ -134,7 +112,7 @@
     /* Secondary Action: Sleek Ghost/Outline */
     .btn-secondary {
         background-color: transparent;
-        color: #1e293b;
+        color: var(--text-primary);
         border: 1.5px solid var(--secondary-border);
     }
 
@@ -161,30 +139,28 @@
     }
 </style>
 
-<!-- The GDPR Modal Overlay -->
-<div class="modal-overlay" id="gdprModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
-    <!-- The Modal Card -->
-    <div class="modal-card">
-        
-        <!-- Soft Document Icon -->
-        <div class="modal-icon">
-            <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"></path>
-            </svg>
-        </div>
+<!-- The GDPR Section (Integrated smoothly into layout) -->
+<div class="gdpr-section" id="gdprSection">
+    
+    <!-- Soft Document Icon -->
+    <div class="section-icon">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"></path>
+        </svg>
+    </div>
 
-        <h2 class="modal-title" id="modalTitle">Action Required</h2>
-        
-        <p class="modal-description">
+    <div class="section-content">
+        <h2 class="section-title">Action Required</h2>
+        <p class="section-description">
             Attention: <span class="highlight-count" id="fileCount">0</span> files in your workspace require immediate action regarding GDPR data retention.
         </p>
-
-        <div class="modal-actions">
-            <button class="btn btn-secondary" onclick="viewFiles()">View Files</button>
-            <button class="btn btn-primary" onclick="purgeFiles()">Purge Immediately</button>
-        </div>
-
     </div>
+
+    <div class="section-actions">
+        <button class="section-btn btn-secondary" onclick="viewFiles()">View Files</button>
+        <button class="section-btn btn-primary" onclick="purgeFiles()">Purge Immediately</button>
+    </div>
+
 </div>
 
 <script>
@@ -192,14 +168,13 @@
     const gdprState = {
         violatingFilesCount: 0,
         violatingFiles: [],
-        employeeId: null,
-        isOpen: false
+        employeeId: null
     };
 
-    const modalOverlay = document.getElementById('gdprModal');
+    const gdprSection = document.getElementById('gdprSection');
     const fileCountSpan = document.getElementById('fileCount');
 
-    // Trigger Modal
+    // Trigger Modal function is re-purposed to show the inline section
     function triggerGdprModal(employeeId, violatingFiles) {
         if (!violatingFiles || violatingFiles.length === 0) return;
         gdprState.employeeId = employeeId;
@@ -207,20 +182,16 @@
         gdprState.violatingFilesCount = violatingFiles.length;
         
         fileCountSpan.textContent = gdprState.violatingFilesCount;
-        gdprState.isOpen = true;
-        modalOverlay.classList.add('active');
-    }
-
-    // Close Modal
-    function closeModal() {
-        gdprState.isOpen = false;
-        modalOverlay.classList.remove('active');
+        
+        gdprSection.style.display = 'flex';
+        // force reflow
+        void gdprSection.offsetWidth;
+        gdprSection.style.opacity = '1';
     }
 
     // Action: View Files
     function viewFiles() {
         console.log("Navigating to file review...");
-        closeModal();
         window.location.href = "/data-points?filter=delete";
     }
 
@@ -228,7 +199,7 @@
     async function purgeFiles() {
         console.log("Initiating file purge...");
         
-        const primaryBtn = document.querySelector('.btn-primary');
+        const primaryBtn = gdprSection.querySelector('.btn-primary');
         const originalText = primaryBtn.textContent;
         
         // Visual feedback: Loading state
@@ -238,23 +209,52 @@
 
         try {
             // Bulk purge
+            let hasErrors = false;
+            let errorDetail = "Unknown error";
             for (const file of gdprState.violatingFiles) {
-                await fetch(`/api/employee/files/${file.file_id}/delete-expired`, {
+                const response = await fetch(`/api/employee/files/${file.file_id}/delete-expired`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ employee_id: gdprState.employeeId })
                 });
+                
+                if (!response.ok) {
+                    hasErrors = true;
+                    try {
+                        const data = await response.json();
+                        if (data) {
+                            if (typeof data.detail === 'string') errorDetail = data.detail;
+                            else if (Array.isArray(data.detail)) errorDetail = data.detail.map(err => err.msg).join(', ');
+                            else if (data.message) errorDetail = data.message;
+                        }
+                    } catch (e) {}
+                    break;
+                }
+            }
+            
+            if (hasErrors) {
+                alert("Failed to purge all files: " + errorDetail);
+                primaryBtn.textContent = originalText;
+                primaryBtn.style.opacity = "1";
+                primaryBtn.style.pointerEvents = "auto";
+                return;
             }
             
             gdprState.violatingFilesCount = 0; // Update compliance status
-            closeModal();
+            
+            // Hide section
+            gdprSection.style.opacity = '0';
+            setTimeout(() => {
+                gdprSection.style.display = 'none';
+            }, 400);
             
             // Refresh dashboard
-            window.location.reload();
+            setTimeout(() => {
+                window.location.reload();
+            }, 500);
         } catch (err) {
             console.error(err);
-            alert("Failed to purge all files.");
-        } finally {
+            alert("Failed to purge all files due to connection error: " + err.message);
             primaryBtn.textContent = originalText;
             primaryBtn.style.opacity = "1";
             primaryBtn.style.pointerEvents = "auto";
