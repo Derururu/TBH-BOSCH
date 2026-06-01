@@ -198,3 +198,64 @@ def get_db():
 # ``create_all`` is safe for SQLite (creates only if not exists) but does NOT
 # handle schema migrations (no ALTER TABLE — see module-level docstring).
 Base.metadata.create_all(bind=engine)
+
+
+def _ensure_sqlite_demo_columns():
+    """Patch old local SQLite demo DBs that predate the current ORM columns."""
+    if not _is_sqlite:
+        return
+
+    finding_columns = {
+        "finding_uid": "VARCHAR",
+        "file_id_str": "VARCHAR",
+        "type": "VARCHAR",
+        "value": "VARCHAR",
+        "field": "VARCHAR DEFAULT ''",
+        "context": "VARCHAR DEFAULT 'unknown'",
+        "risk_level": "VARCHAR DEFAULT 'medium'",
+        "confidence": "FLOAT DEFAULT 1.0",
+        "evidence": "VARCHAR DEFAULT ''",
+        "recommended_action": "VARCHAR DEFAULT 'review'",
+        "assigned_owner": "VARCHAR DEFAULT ''",
+        "owner_email": "VARCHAR DEFAULT ''",
+        "owner_department": "VARCHAR DEFAULT ''",
+        "owner_resolved": "BOOLEAN DEFAULT 0",
+        "escalation_target": "VARCHAR DEFAULT ''",
+        "is_flagged": "BOOLEAN DEFAULT 1",
+        "flag_type": "VARCHAR DEFAULT ''",
+        "review_status": "VARCHAR DEFAULT 'pending_review'",
+        "review_action": "VARCHAR",
+        "reviewer": "VARCHAR",
+        "reviewed_at": "VARCHAR",
+    }
+
+    file_columns = {
+        "last_modified": "DATETIME",
+        "file_hash": "VARCHAR",
+        "retention_deadline": "DATETIME",
+    }
+
+    employee_columns = {
+        "department": "VARCHAR",
+        "location": "VARCHAR",
+    }
+
+    table_specs = {
+        "findings": finding_columns,
+        "files": file_columns,
+        "employees": employee_columns,
+    }
+
+    with engine.begin() as conn:
+        for table_name, expected_columns in table_specs.items():
+            existing = {
+                row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()
+            }
+            for column_name, sql_type in expected_columns.items():
+                if column_name not in existing:
+                    conn.exec_driver_sql(
+                        f"ALTER TABLE {table_name} ADD COLUMN {column_name} {sql_type}"
+                    )
+
+
+_ensure_sqlite_demo_columns()

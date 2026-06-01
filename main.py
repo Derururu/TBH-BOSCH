@@ -1,5 +1,5 @@
 
-from fastapi import FastAPI, Depends, Request, Form, Response, Cookie
+from fastapi import FastAPI, Depends, Request, Form, Response, Cookie, UploadFile, File, HTTPException
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -10,6 +10,15 @@ import database
 from database import get_db, Employee, FileMetadata, Finding, Notification
 
 import os
+import json
+import hashlib
+import shutil
+import tempfile
+import time
+import uuid
+from pathlib import Path
+from urllib.parse import urlparse, unquote
+from urllib.request import Request as UrlRequest, urlopen
 from typing import Optional, List, Dict, Any
 
 RETENTION_PERIOD_DAYS = 365 * 3
@@ -1163,6 +1172,174 @@ def trigger_manual_scan(
 _latest_extraction_result: dict = {}
 
 
+def _safe_employee_id_for_email(email: str, used_ids: set[str]) -> str:
+    seed = email or f"owner-{len(used_ids)}"
+    emp_id_int = int(hashlib.md5(seed.encode()).hexdigest(), 16) % 90000 + 10000
+    emp_id = f"BX-{emp_id_int}"
+    while emp_id in used_ids:
+        emp_id_int = (emp_id_int - 10000 + 1) % 90000 + 10000
+        emp_id = f"BX-{emp_id_int}"
+    return emp_id
+
+
+def _load_owner_hints(scan_root: Path) -> dict:
+    hints_path = scan_root / "owner_hints.json"
+    if not hints_path.exists():
+        return {}
+    with open(hints_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _ensure_employee_for_file(db: Session, file_name: str, owner_hints: dict) -> tuple[str, dict]:
+    hint = owner_hints.get(file_name, {}) if owner_hints else {}
+    email = hint.get("email") or "admin@bosch.com"
+    employee = db.query(Employee).filter(Employee.email == email).first()
+    if employee:
+        return employee.employee_id, hint
+
+    used_ids = {row[0] for row in db.query(Employee.employee_id).all() if row[0]}
+    employee_id = _safe_employee_id_for_email(email, used_ids)
+    name = hint.get("name") or email.split("@")[0].replace(".", " ").title()
+    first, last = name.split(" ", 1) if " " in name else (name, "")
+    employee = Employee(
+        employee_id=employee_id,
+        email=email,
+        first_name=first,
+        last_name=last,
+        password="password123",
+        department=hint.get("department", "Unknown"),
+        location=hint.get("location", "Unknown"),
+    )
+    db.add(employee)
+    db.flush()
+    return employee.employee_id, hint
+
+
+def _hash_file_for_metadata(file_path: str) -> str:
+    hasher = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+def _persist_extraction_result(
+    db: Session,
+    result: dict,
+    owner_hints: Optional[dict] = None,
+) -> dict:
+    from datetime import datetime, timedelta
+
+    owner_hints = owner_hints or {}
+    existing_findings = {
+        row[0] for row in db.query(Finding.finding_uid).all() if row[0]
+    }
+
+    files_created = 0
+    files_updated = 0
+    findings_added = 0
+
+    for file_detail in result.get("user_file_details", []):
+        file_path = file_detail.get("file_path", "")
+        if not file_path:
+            continue
+
+        path_obj = Path(file_path)
+        file_name = file_detail.get("file_name") or path_obj.name
+        owner_employee_id, hint = _ensure_employee_for_file(db, file_name, owner_hints)
+
+        try:
+            stat = path_obj.stat()
+            last_modified = datetime.fromtimestamp(stat.st_mtime)
+            file_hash = _hash_file_for_metadata(str(path_obj))
+        except OSError:
+            last_modified = datetime.now()
+            file_hash = hashlib.sha256(file_path.encode()).hexdigest()
+
+        file_record = db.query(FileMetadata).filter(FileMetadata.file_path == file_path).first()
+        if file_record:
+            file_record.owner_employee_id = owner_employee_id
+            file_record.size_bytes = file_detail.get("size_bytes", 0)
+            file_record.last_modified = last_modified
+            file_record.file_hash = file_hash
+            if not file_record.retention_deadline:
+                file_record.retention_deadline = last_modified + timedelta(days=RETENTION_PERIOD_DAYS)
+            files_updated += 1
+        else:
+            file_record = FileMetadata(
+                file_path=file_path,
+                owner_employee_id=owner_employee_id,
+                size_bytes=file_detail.get("size_bytes", 0),
+                file_hash=file_hash,
+                last_modified=last_modified,
+                retention_deadline=last_modified + timedelta(days=RETENTION_PERIOD_DAYS),
+            )
+            db.add(file_record)
+            db.flush()
+            files_created += 1
+
+        owner_name = file_detail.get("owner") or hint.get("name", "")
+        owner_email = file_detail.get("owner_email") or hint.get("email", "")
+        owner_department = hint.get("department", "")
+
+        for finding in file_detail.get("findings", []):
+            matched_val = finding.get("matched_value", "")
+            category = finding.get("category", "unknown")
+            context = finding.get("match_context", "")
+            uid_seed = f"{file_path}|{category}|{matched_val}|{context}"
+            finding_uid = hashlib.sha256(uid_seed.encode()).hexdigest()
+            if finding_uid in existing_findings:
+                continue
+            existing_findings.add(finding_uid)
+
+            row = Finding(
+                finding_uid=finding_uid,
+                file_id=file_record.id,
+                file_id_str=file_path,
+                category=category,
+                confidence_score=finding.get("confidence", 1.0),
+                flagged_snippet=matched_val,
+                reasoning=context,
+                status="pending_review",
+                review_status="pending_review",
+                type=category,
+                value=matched_val,
+                context=context,
+                risk_level=finding.get("risk_level", "medium"),
+                confidence=finding.get("confidence", 1.0),
+                recommended_action=finding.get("recommended_action", "review"),
+                assigned_owner=owner_name,
+                owner_email=owner_email,
+                owner_department=owner_department,
+                is_flagged=True,
+                flag_type="Extractor_Regex",
+            )
+            db.add(row)
+            findings_added += 1
+
+    db.commit()
+    return {
+        "db_files_created": files_created,
+        "db_files_updated": files_updated,
+        "db_findings_added": findings_added,
+    }
+
+
+def _run_intake_scan(scan_root: Path, db: Session, owner_hints: Optional[dict] = None) -> dict:
+    from src.extractor import scan_directory
+
+    started = time.monotonic()
+    owner_hints = owner_hints if owner_hints is not None else _load_owner_hints(scan_root)
+    result = scan_directory(str(scan_root), owner_hints=owner_hints)
+    db_stats = _persist_extraction_result(db, result, owner_hints)
+    result.update(db_stats)
+    result["source_path"] = str(scan_root)
+    result["intake_duration_seconds"] = round(time.monotonic() - started, 3)
+    global _latest_extraction_result
+    _latest_extraction_result = result
+    return result
+
+
 class TriggerExtractionRequest(PydanticBaseModel):
     """Body for POST /api/admin/trigger-extraction."""
     target_dir: str = "./demo_drive_rich"
@@ -1187,89 +1364,103 @@ def trigger_extraction(
     The scan handles unlimited data — a 5 TB drive uses the same
     RAM as a 5 MB folder because files are never fully loaded.
     """
-    global _latest_extraction_result
-    from pathlib import Path as _Path
-    from src.extractor import scan_directory
-    import json
-
-    target_dir = req.target_dir
-    if not _Path(target_dir).exists():
-        from fastapi import HTTPException
+    target_dir = Path(req.target_dir)
+    if not target_dir.exists():
         raise HTTPException(status_code=400, detail=f"Directory not found: {target_dir}")
+    return _run_intake_scan(target_dir, db)
 
-    # Load owner hints
-    hints_path = _Path(target_dir) / "owner_hints.json"
-    owner_hints = {}
-    if hints_path.exists():
-        with open(hints_path, "r", encoding="utf-8") as f:
-            owner_hints = json.load(f)
 
-    # ── Run the extraction pipeline (memory-safe, generator-based) ──
-    result = scan_directory(str(target_dir), owner_hints=owner_hints)
+class IntakeLinkRequest(PydanticBaseModel):
+    """Body for POST /api/admin/intake/link."""
+    source: str
 
-    # ── Persist findings to the DB for the employee dashboard ──
-    from datetime import datetime, timedelta
-    import hashlib
 
-    # Cache all existing finding values to prevent duplicates
-    # Cache existing (file_id, finding_value) pairs to prevent duplicates within the same file
-    existing_values = {
-        (f.file_id, f.flagged_snippet) for f in db.query(Finding.file_id, Finding.flagged_snippet).all() if f.flagged_snippet
-    }
+def _download_direct_url(source: str, destination_dir: Path) -> Path:
+    parsed = urlparse(source)
+    filename = Path(unquote(parsed.path)).name or "downloaded-source.txt"
+    target = destination_dir / filename
+    req = UrlRequest(source, headers={"User-Agent": "SENTRYX-GDPR-Scanner/1.0"})
+    max_bytes = 50 * 1024 * 1024
+    bytes_read = 0
+    with urlopen(req, timeout=20) as response, open(target, "wb") as out:
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            bytes_read += len(chunk)
+            if bytes_read > max_bytes:
+                raise HTTPException(status_code=413, detail="Linked file is larger than the 50 MB demo limit.")
+            out.write(chunk)
+    return target
 
-    # Cache existing file names for FileMetadata lookup
-    import os
-    all_metas = db.query(database.FileMetadata.id, database.FileMetadata.file_path).all()
-    meta_id_by_name = {os.path.basename(fp): mid for mid, fp in all_metas}
 
-    new_findings_added = 0
-    for file_detail in result.get("user_file_details", []):
-        file_path = file_detail["file_path"]
-        file_name = os.path.basename(file_path)
-        file_id = meta_id_by_name.get(file_name)
-        
-        if not file_id:
+@app.post("/api/admin/intake/link")
+def scan_link_or_path(
+    req: IntakeLinkRequest,
+    db: Session = Depends(get_db),
+):
+    """Scan a local directory/file path, file:// URL, or direct downloadable URL."""
+    source = req.source.strip()
+    if not source:
+        raise HTTPException(status_code=400, detail="Source is required.")
+
+    parsed = urlparse(source)
+    if parsed.scheme in {"http", "https"}:
+        scan_root = Path("data/uploads") / f"linked-{uuid.uuid4().hex[:10]}"
+        scan_root.mkdir(parents=True, exist_ok=True)
+        _download_direct_url(source, scan_root)
+        return _run_intake_scan(scan_root, db)
+
+    if parsed.scheme == "file":
+        scan_path = Path(unquote(parsed.path))
+    else:
+        scan_path = Path(source).expanduser()
+
+    if not scan_path.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Source not found. Use a local path, file:// URL, or direct downloadable http(s) file URL.",
+        )
+
+    if scan_path.is_file():
+        scan_root = Path("data/uploads") / f"single-{uuid.uuid4().hex[:10]}"
+        scan_root.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(scan_path, scan_root / scan_path.name)
+    else:
+        scan_root = scan_path
+
+    return _run_intake_scan(scan_root, db)
+
+
+@app.post("/api/admin/intake/upload")
+async def scan_uploaded_sources(
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+):
+    """Upload one or many files, persist them, scan them, and refresh dashboard data."""
+    if not files:
+        raise HTTPException(status_code=400, detail="Upload at least one file.")
+
+    scan_root = Path("data/uploads") / f"upload-{uuid.uuid4().hex[:10]}"
+    scan_root.mkdir(parents=True, exist_ok=True)
+
+    saved = 0
+    for uploaded in files:
+        if not uploaded.filename:
             continue
+        safe_name = Path(uploaded.filename.replace("\\", "/")).name
+        if not safe_name:
+            continue
+        target = scan_root / safe_name
+        with open(target, "wb") as out:
+            shutil.copyfileobj(uploaded.file, out)
+        await uploaded.close()
+        saved += 1
 
-        for finding in file_detail.get("findings", []):
-            matched_val = finding["matched_value"]
-            if (file_id, matched_val) in existing_values:
-                continue
-            existing_values.add((file_id, matched_val))
+    if saved == 0:
+        raise HTTPException(status_code=400, detail="No readable files were uploaded.")
 
-            row = Finding(
-                file_id=file_id,
-                category=finding["category"],
-                confidence_score=finding["confidence"],
-                flagged_snippet=matched_val,
-                reasoning=finding["match_context"],
-                status="pending_review",
-                review_status="pending_review",
-                # Extended fields
-                type=finding["category"],
-                value=matched_val,
-                context=finding["match_context"],
-                risk_level=finding["risk_level"],
-                confidence=finding["confidence"],
-                recommended_action=finding["recommended_action"],
-                assigned_owner=file_detail.get("owner", ""),
-                owner_email=file_detail.get("owner_email", ""),
-                is_flagged=True,
-                flag_type="Extractor_Regex",
-            )
-            db.add(row)
-            new_findings_added += 1
-
-    if new_findings_added:
-        db.commit()
-
-    # Cache result for the GET endpoint
-    _latest_extraction_result = result
-
-    # Add DB persistence stats to the response
-    result["db_findings_added"] = new_findings_added
-
-    return result
+    return _run_intake_scan(scan_root, db)
 
 
 @app.get("/api/admin/extraction-results")

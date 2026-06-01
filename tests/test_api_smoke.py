@@ -93,6 +93,66 @@ class TestMainAppPages:
         # Search requires auth; without cookie should redirect or 401
         assert response.status_code in (403, 401, 307)
 
+    def test_trigger_extraction_persists_new_text_files(self, main_test_client, engine, tmp_path):
+        from database import FileMetadata, Finding
+
+        source_dir = tmp_path / "intake"
+        source_dir.mkdir()
+        source_file = source_dir / "employee_record.txt"
+        source_file.write_text(
+            "Employee: Maya Singh\nEmail: maya.singh@bosch.com\nTax ID: DE123456789\n",
+            encoding="utf-8",
+        )
+
+        response = main_test_client.post(
+            "/api/admin/trigger-extraction",
+            json={"target_dir": str(source_dir)},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["admin_aggregates"]["total_scanned_files"] == 1
+        assert data["admin_aggregates"]["total_findings"] >= 2
+        assert data["db_files_created"] == 1
+        assert data["db_findings_added"] >= 2
+
+        db = sessionmaker(bind=engine)()
+        try:
+            file_row = db.query(FileMetadata).filter(FileMetadata.file_path == str(source_file)).first()
+            assert file_row is not None
+            assert db.query(Finding).filter(Finding.file_id == file_row.id).count() >= 2
+        finally:
+            db.close()
+
+    def test_intake_upload_feeds_dashboard_database(self, main_test_client, engine):
+        from database import FileMetadata, Finding
+
+        response = main_test_client.post(
+            "/api/admin/intake/upload",
+            files=[
+                (
+                    "files",
+                    (
+                        "uploaded_pii.txt",
+                        b"Contact: upload.owner@bosch.com\nPhone: +49 170 1234567\n",
+                        "text/plain",
+                    ),
+                )
+            ],
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["admin_aggregates"]["total_scanned_files"] == 1
+        assert data["db_files_created"] == 1
+        assert data["db_findings_added"] >= 1
+
+        db = sessionmaker(bind=engine)()
+        try:
+            file_row = db.query(FileMetadata).filter(FileMetadata.file_path.like("%uploaded_pii.txt")).first()
+            assert file_row is not None
+            assert db.query(Finding).filter(Finding.file_id == file_row.id).count() >= 1
+        finally:
+            db.close()
+
 
 # =========================================================================
 # api.py -- scan API routes
