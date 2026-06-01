@@ -1,88 +1,113 @@
-# TBH-BOSCH
+# Bosch GDPR Data Discovery Prototype
 
-GDPR / PII document scanning demo built for the TechON Hackathon 2026 (Bosch problem statement).
+TechON Hackathon 2026 prototype for automated discovery, classification, and human review of GDPR-relevant personal data across corporate file repositories.
 
-Discovers PDFs and office documents, extracts text, detects personal data (PII/GDPR items), assigns data owners, and presents findings via a FastAPI web dashboard.
+## Objective
 
----
+Large organizations such as Bosch hold personal data across OneDrive, SharePoint, shared drives, and other distributed repositories. Manual review does not scale across hundreds of thousands of locations, so this prototype demonstrates an automated discovery pipeline that:
 
-## Quick Deploy to Render
+- scans unstructured documents for personal and sensitive data,
+- classifies findings by GDPR-relevant category and risk,
+- assigns each finding to a responsible data owner,
+- supports full scans and repeat delta scans,
+- surfaces findings to employees and administrators for human review,
+- applies a 3-year retention policy when calculating deletion deadlines.
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/YOUR_ORG/tbh-bosch)
+The system is a proof of concept. It recommends actions and prepares evidence, but deletion or retention decisions remain human-controlled.
 
-Or manually via Blueprint:
+## Hackathon Scope Mapping
 
-1. Push this repo to GitHub.
-2. In [Render Dashboard](https://dashboard.render.com), click **New > Blueprint** and connect the repo.
-3. Render provisions a web service + free PostgreSQL database automatically.
-4. After deploy, open the Render Shell and run:
-   ```bash
-   python scripts/demo/seed_demo_data.py
-   ```
-5. Open the `.onrender.com` URL to see the login page.
+| Priority | Requirement | Prototype implementation |
+| --- | --- | --- |
+| 1 | Scan logic | `src/scanner.py`, `src/classifier.py`, `src/pdf_parser.py`, and `src/ai_parser.py` perform PDF parsing, regex detection, optional AI enrichment, risk classification, and owner assignment. |
+| 2 | Employee frontend | `/employee-dashboard` shows only the logged-in employee's responsible files, flagged snippets, retention status, and guided actions such as delete expired data or extend retention. |
+| 3 | Admin frontend | `/admin-dashboard` and `/admin-database-explorer` expose KPIs including scanned files, scanned data volume, flagged files, expiring files, and employee-level drilldown. |
+| 4 | Data connectors | The local connector is demo-ready. Microsoft Graph, Google Drive, and connector abstractions exist for future OneDrive, SharePoint, and drive integration. |
 
-See `docs/presentation-demo-runbook.md` for the full demo walkthrough.
+## Detection Coverage
 
----
+The deterministic scanner currently detects common GDPR-relevant entities including:
 
-## Local Development
+- names in labeled fields,
+- usernames and employee IDs,
+- email addresses,
+- phone numbers,
+- home or business addresses,
+- signatures,
+- passport numbers,
+- ID card numbers,
+- driver's license numbers,
+- IBANs,
+- tax IDs,
+- dates of birth,
+- contextual secrets such as passwords.
+
+The optional AI parser can enrich document classification and add contextual findings that regex alone may miss.
+
+## Architecture
+
+```text
+Data source connector
+  -> file discovery and metadata
+  -> delta comparison
+  -> document parsing / OCR-ready extraction
+  -> deterministic PII scan
+  -> optional AI enrichment
+  -> owner assignment
+  -> SQLite persistence
+  -> employee/admin dashboards
+```
+
+Important files:
+
+- `main.py` - FastAPI web dashboard and demo routes.
+- `api.py` - standalone scan API for triggering scans and reviewing findings.
+- `database.py` - SQLite schema for employees, files, findings, scan jobs, and notifications.
+- `src/scanner.py` - core full and AI-enhanced scan orchestration.
+- `src/classifier.py` - deterministic PII patterns and document classification.
+- `src/delta.py` - repeat-scan state and change detection.
+- `src/streaming_scanner.py` - scalable streaming scan path.
+- `docs/adr-001-scan-architecture.md` - architecture decision record for the optimized scan design.
+
+## Run The Demo
+
+Install dependencies, then start the dashboard:
 
 ```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Seed demo data (SQLite by default)
-python scripts/demo/seed_demo_data.py
-
-# Start the web dashboard (login, admin, employee views)
 uvicorn main:app --reload --port 8000
-
-# Start the scan API (trigger scans, query findings, review actions)
-uvicorn api:app --reload --port 8000
 ```
 
-Open [http://localhost:8000](http://localhost:8000).
+Open `http://127.0.0.1:8000`.
 
-**Default credentials (demo only):**
+Demo login:
+
 - Admin: `admin@bosch.com` / `password123`
-- Employees: any email from `demo_drive_rich/owner_hints.json` / `password123`
+- Employees: generated from `demo_drive_rich/owner_hints.json`, also using `password123`
 
----
-
-## Environment Variables
-
-See `.env.example` for all options. Key ones:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `sqlite:///./bosch_gdpr.db` | PostgreSQL URL (Render sets this automatically) |
-| `SCAN_ROOT` | `./demo_drive_rich` | Directory to scan for demo data |
-| `DEMO_MODE` | `true` | Enable demo-specific behavior |
-| `OPENROUTER_API_KEY` | (none) | OpenRouter API key for AI classification |
-
----
-
-## Project Structure
-
-```
-main.py                  # FastAPI web dashboard + mixed API routes
-api.py                   # FastAPI scan API (separate app)
-database.py              # SQLAlchemy ORM models
-src/                     # Scan engine (scanner, classifier, owner, etc.)
-templates/               # Jinja2 HTML templates
-static/                  # CSS/JS assets
-demo_drive_rich/         # Demo data (sample PDFs + owner_hints.json)
-scripts/demo/            # Demo utilities (seed data script)
-docs/                    # Documentation
-render.yaml              # Render Blueprint deploy config
-```
-
----
-
-## CLI Tools
+Trigger a scan from the admin UI or call:
 
 ```bash
-# Run a scan via CLI (no web server)
-python -m src.pipeline full-scan --repo ./data/sample_pdfs --output ./data/output
-python -m src.pipeline ai-scan --repo ./data/sample_pdfs --output ./data/output
+curl -X POST http://127.0.0.1:8000/api/admin/trigger-scan \
+  -H "Content-Type: application/json" \
+  -d '{"target_dir":"./demo_drive_rich"}'
 ```
+
+## Evaluation Criteria
+
+The prototype is designed around the official evaluation dimensions:
+
+- **Accuracy:** deterministic regex rules for reproducible baseline detection, with optional AI enrichment for context-sensitive cases.
+- **Reproducibility:** repeated regex-only scans produce stable results for the same input files.
+- **Speed:** delta scanning avoids reprocessing unchanged files; streaming scan logic supports bounded-memory processing.
+- **Resource intensity:** metadata-first delta planning and layered AI reduce downloads, memory usage, and API calls.
+
+## Retention Policy
+
+The official retention period is 3 years. The application calculates a file's retention deadline as:
+
+```text
+retention_deadline = last_modified + 3 years
+```
+
+Expired files are shown to the responsible employee and can be cleaned up through the dashboard. Retention extension remains a guided, auditable human action.

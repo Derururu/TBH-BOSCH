@@ -772,6 +772,58 @@ body.light .explore-btn:hover {
 }
 
 /* =========================================
+   FILE UPLOAD
+   ========================================= */
+.upload-file-input {
+    display: block;
+    width: 100%;
+    max-width: 400px;
+    padding: 11px 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.3s ease;
+}
+
+.upload-file-input::file-selector-button {
+    padding: 6px 14px;
+    margin-right: 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.upload-file-input::file-selector-button:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--border-hover);
+}
+
+.upload-file-input:hover {
+    border-color: var(--border-hover);
+}
+
+.upload-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.upload-result {
+    margin-top: 20px;
+    max-width: 600px;
+}
+
+/* =========================================
    DYNAMIC SCROLL SECTIONS
    ========================================= */
 .full-page-section {

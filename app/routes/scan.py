@@ -15,6 +15,8 @@ Mounted in main.py so existing URLs do not change.
 import os
 from typing import Optional, List, Dict, Any
 
+RETENTION_PERIOD_DAYS = 365 * 3
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query as QueryParam, Cookie
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -174,7 +176,7 @@ def trigger_manual_scan(
                 size_bytes=file_meta.size_bytes,
                 file_hash=file_meta.content_hash,
                 last_modified=last_mod,
-                retention_deadline=datetime.now() + timedelta(days=200)
+                retention_deadline=last_mod + timedelta(days=RETENTION_PERIOD_DAYS)
             )
             db.add(new_fm)
 
@@ -491,6 +493,74 @@ async def scan_uploaded_image(file: UploadFile = File(...)):
         # Drop the raw bytes reference to free memory immediately
         del file_bytes
 
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# POST /api/scan/file
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_ALLOWED_PDF_TYPES = {"application/pdf"}
+
+_ALLOWED_FILE_TYPES = _ALLOWED_IMAGE_TYPES | _ALLOWED_PDF_TYPES
+
+
+@router.post("/api/scan/file")
+async def scan_uploaded_file(file: UploadFile = File(...)):
+    """Upload an image or PDF for PII compliance scanning.
+
+    Images: OCR via Tesseract → PII scan.
+    PDFs:   Text extraction via pdfplumber → PII scan.
+
+    Returns:
+        {
+            "status": "success",
+            "file_type": "image" | "pdf",
+            "cache_hit": true/false,
+            "file_hash": "sha256hex...",
+            "text": "...extracted text...",
+            "flags": [ { "type": "...", "value": "...", ... } ]
+        }
+    """
+    content_type = (file.content_type or "").lower()
+
+    if content_type not in _ALLOWED_FILE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported file type: '{content_type}'. "
+                f"Allowed: PNG, JPEG, TIFF, BMP, WebP, GIF, PDF"
+            ),
+        )
+
+    try:
+        file_bytes = await file.read()
+    finally:
+        await file.close()
+
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    is_pdf = content_type in _ALLOWED_PDF_TYPES
+
+    try:
+        if is_pdf:
+            from src.ocr_scanner import scan_pdf
+            result = scan_pdf(file_bytes)
+        else:
+            from src.ocr_scanner import scan_image
+            result = scan_image(file_bytes)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Scan failed: {str(exc)}",
+        )
+    finally:
+        del file_bytes
+
+    result["file_type"] = "pdf" if is_pdf else "image"
     return result
 
 

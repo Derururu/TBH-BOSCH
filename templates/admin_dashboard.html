@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 
-<link rel="stylesheet" href="/static/css/dashboard.css?v=8">
+<link rel="stylesheet" href="/static/css/dashboard.css?v=9">
 
 <!-- Apply saved theme before paint to avoid flash -->
 <script>
@@ -273,6 +273,27 @@
 
     <section class="glass-card explorer reveal">
 
+        <h2>Upload File</h2>
+
+        <p>
+            Select a file to scan for GDPR-relevant personal data. Supported formats: PNG, JPEG, TIFF, BMP, WebP, PDF.
+        </p>
+
+        <input type="file" id="fileUploadInput" accept="image/png,image/jpeg,image/tiff,image/bmp,image/webp,image/gif,application/pdf"
+               class="upload-file-input" />
+
+        <div class="upload-actions">
+            <button id="scanUploadBtn" class="explore-btn" onclick="uploadAndScan()" disabled>
+                Scan File
+            </button>
+        </div>
+
+        <div id="uploadResult" class="upload-result" style="display: none;"></div>
+
+    </section>
+
+    <section class="glass-card explorer reveal">
+
         <h2>
             Explore Employee Database
         </h2>
@@ -452,6 +473,77 @@ async function loadOverviewStats() {
 // Fire the overview stats fetch on page load
 loadOverviewStats();
 
+// --- FILE UPLOAD + OCR SCAN ---
+const fileInput = document.getElementById('fileUploadInput');
+const scanBtn = document.getElementById('scanUploadBtn');
+const resultBox = document.getElementById('uploadResult');
+
+fileInput.addEventListener('change', function() {
+    scanBtn.disabled = !(this.files && this.files.length > 0);
+    resultBox.style.display = 'none';
+});
+
+async function uploadAndScan() {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    scanBtn.disabled = true;
+    scanBtn.textContent = 'Scanning...';
+    resultBox.style.display = 'block';
+    resultBox.innerHTML = '<div class="alert-card glass-card" style="padding: 20px; text-align: left;"><p style="color: var(--text-secondary);">Scanning file for personal data...</p></div>';
+
+    try {
+        const response = await fetch('/api/scan/file', {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+            resultBox.innerHTML = '<div class="alert-card glass-card" style="padding: 20px; text-align: left; border-color: var(--accent-red);"><p style="color: #ff4d6a;">Scan failed: ' + (data.detail || 'Upload error') + '</p></div>';
+            return;
+        }
+
+        let flagsHtml = '';
+        if (data.flags && data.flags.length > 0) {
+            flagsHtml = '<div style="margin-top: 16px;"><h4 style="font-size: 13px; font-weight: 600; color: var(--accent-red); margin-bottom: 8px;">Flagged Findings</h4>' +
+                data.flags.map(f =>
+                    '<div style="padding: 10px 14px; margin-bottom: 6px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle); background: var(--bg-card);">' +
+                    '<span style="font-weight: 600; font-size: 13px;">' + escapeHtml(f.type) + '</span>' +
+                    '<code style="display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px;">' + escapeHtml(f.value) + '</code>' +
+                    '<span style="font-size: 11px; color: var(--text-muted);">Risk: ' + (f.risk_level || 'medium') + '</span>' +
+                    '</div>'
+                ).join('') + '</div>';
+        } else {
+            flagsHtml = '<p style="color: #22c55e; margin-top: 12px; font-size: 13px;">No personal data detected.</p>';
+        }
+
+        const cacheTag = data.cache_hit ? '<span style="font-size: 11px; color: var(--text-muted);"> · cached result</span>' : '';
+
+        resultBox.innerHTML =
+            '<div class="alert-card glass-card" style="padding: 20px; text-align: left;">' +
+            '<h3 style="font-size: 15px; font-weight: 500; margin-bottom: 4px;">Scan Complete</h3>' +
+            '<p style="font-size: 12px; color: var(--text-secondary);">Status: ' + data.status + cacheTag + '</p>' +
+            (data.text ? '<details style="margin-top: 12px;"><summary style="cursor: pointer; font-size: 13px; font-weight: 500;">Extracted Text</summary><pre style="margin-top: 8px; padding: 12px; border-radius: var(--radius-md); background: var(--bg-secondary); font-size: 12px; max-height: 180px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5;">' + escapeHtml(data.text) + '</pre></details>' : '') +
+            flagsHtml +
+            '</div>';
+
+    } catch (err) {
+        resultBox.innerHTML = '<div class="alert-card glass-card" style="padding: 20px; text-align: left; border-color: var(--accent-red);"><p style="color: #ff4d6a;">Network error: ' + err.message + '</p></div>';
+    } finally {
+        scanBtn.disabled = false;
+        scanBtn.textContent = 'Scan File';
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
 
 </script>
 <script src="/static/js/dashboard.js?v=6"></script>

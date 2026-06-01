@@ -40,7 +40,7 @@ _PATTERNS: list[tuple[re.Pattern, str, str, str]] = [
     (re.compile(r'\b\d{5}[ \t]+[A-ZÄÖÜ][a-zäöüß]+([ \t]+\d{1,3}[a-z]?)?\b'),
      "address", "medium", "review"),
     # ── Address (Street patterns) ──
-    (re.compile(r'\b[A-ZÄÖÜ][a-zäöüß]+(?:straße|str\.|weg|gasse|allee|platz|ring|damm|ufer)\s+\d{1,5}[a-z]?\b', re.IGNORECASE),
+    (re.compile(r'\b[A-ZÄÖÜ][a-zäöüß]+(?:straße|str\.|weg|gasse|allee|platz|ring|damm|ufer)\s+\d{1,5}[a-z]?(?:,\s*\d{5}\s+[A-ZÄÖÜ][a-zäöüß]+)?\b', re.IGNORECASE),
      "address", "medium", "review"),
     # ── Signature ──
     (re.compile(r'(?:Signed|Signature|Unterschrift)[\s:]*[\w\s.]+', re.IGNORECASE),
@@ -106,6 +106,34 @@ _SEMANTIC_PATTERNS: list[tuple[str, str, str, str]] = [
     (r'(?i)\b(?:ssn|social security)\s*[:=]?\s*([\d\-]{9,11})\b', "ssn", "high", "delete"),
 ]
 
+_BLANK_VALUE_RE = re.compile(r"^[\W_]+$", re.UNICODE)
+_CONTEXTUAL_PHONE_RE = re.compile(r"\b(?:call|phone|telephone|mobile|contact(?:ed)?)\b", re.IGNORECASE)
+
+
+def _clean_extracted_value(ftype: str, value: str) -> str:
+    """Normalize obvious template artifacts without changing real evidence."""
+    value = value.strip()
+
+    if ":" in value and ftype in {"signature", "name", "address"}:
+        _, possible_value = value.split(":", 1)
+        if _BLANK_VALUE_RE.fullmatch(possible_value.strip()):
+            return ""
+
+    if _BLANK_VALUE_RE.fullmatch(value):
+        return ""
+
+    if ftype == "name":
+        value = re.sub(r"\s*\((?:EMP-\d{5,8}|E-\d{5})\)\s*$", "", value).strip()
+
+    return value
+
+
+def _should_defer_to_semantic_phone(full_text: str, match: re.Match) -> bool:
+    """Let contextual phone rules own phone numbers introduced by natural language."""
+    prefix = full_text[max(0, match.start() - 40):match.start()]
+    return bool(_CONTEXTUAL_PHONE_RE.search(prefix))
+
+
 def extract_entities(
     text: str,
     pages: list[PageContent],
@@ -138,11 +166,15 @@ def extract_entities(
         # pattern is already a compiled re.Pattern — no re-compilation here.
         # This saves ~0.5ms per pattern per file at scale.
         for match in pattern.finditer(full_text):
+            if ftype == "phone" and _should_defer_to_semantic_phone(full_text, match):
+                continue
+
             value = match.group(0).strip()
             # Determine which group is the value (prefer capture groups)
             if match.lastindex and match.lastindex >= 2:
                 value = match.group(match.lastindex).strip()
 
+            value = _clean_extracted_value(ftype, value)
             if not value:
                 continue
 

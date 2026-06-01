@@ -247,6 +247,73 @@ def scan_image(file_bytes: bytes) -> dict:
     }
 
 
+def scan_pdf(file_bytes: bytes) -> dict:
+    """PDF scan pipeline: hash → cache check → PDF text extraction → PII scan.
+
+    Uses pdfplumber to extract text from each page, then feeds the combined
+    text through the same regex + semantic scanner as the image path.
+
+    Args:
+        file_bytes: Raw bytes of the uploaded PDF file.
+
+    Returns:
+        Same structured dict as scan_image():
+            {
+                "status": "success",
+                "cache_hit": true | false,
+                "file_hash": "a1b2c3…",
+                "text": "…extracted text…",
+                "flags": [ { "type": "…", … }, … ]
+            }
+    """
+    file_hash = stream_hash_bytes(file_bytes)
+
+    cached = _ocr_cache.get(file_hash)
+    if cached is not None:
+        logger.info("OCR cache HIT for hash=%s (PDF)", file_hash[:16])
+        return {
+            "status": "success",
+            "cache_hit": True,
+            "file_hash": file_hash,
+            "text": cached.text,
+            "flags": cached.flags,
+        }
+
+    logger.info("OCR cache MISS for hash=%s — parsing PDF", file_hash[:16])
+
+    from .pdf_parser import parse_pdf
+
+    pages, _needs_ocr = parse_pdf(file_bytes)
+    del file_bytes
+
+    text = "\n\n".join(p.text for p in pages if p.text)
+
+    if not text:
+        return {
+            "status": "success",
+            "cache_hit": False,
+            "file_hash": file_hash,
+            "text": "",
+            "flags": [],
+        }
+
+    flags = _scan_text_for_pii(text)
+
+    _ocr_cache[file_hash] = OCRCacheEntry(
+        text=text,
+        flags=flags,
+        file_hash=file_hash,
+    )
+
+    return {
+        "status": "success",
+        "cache_hit": False,
+        "file_hash": file_hash,
+        "text": text,
+        "flags": flags,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Cache management helpers (for testing / admin use)
 # ---------------------------------------------------------------------------

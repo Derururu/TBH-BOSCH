@@ -11,6 +11,8 @@ import os
 # Default scan root for the demo. Override with SCAN_ROOT env var.
 _SCAN_ROOT = os.environ.get("SCAN_ROOT", "./demo_drive_rich")
 
+RETENTION_PERIOD_DAYS = 365 * 3
+
 
 def seed_on_startup(app):
     """Run database seeding and housekeeping at application startup.
@@ -102,8 +104,6 @@ def seed_on_startup(app):
             email = hint.get("email")
             owner_id = email_to_emp_id.get(email, "BX-ADMIN") if email else "BX-ADMIN"
 
-            days_offset = -10 if idx % 3 == 0 else (15 if idx % 3 == 1 else 200)
-
             try:
                 last_mod = datetime.fromisoformat(file_meta.last_modified)
             except:
@@ -115,7 +115,7 @@ def seed_on_startup(app):
                 size_bytes=file_meta.size_bytes,
                 file_hash=file_meta.content_hash,
                 last_modified=last_mod,
-                retention_deadline=datetime.now() + timedelta(days=days_offset)
+                retention_deadline=last_mod + timedelta(days=RETENTION_PERIOD_DAYS)
             )
             new_metas.append(new_meta)
             db.add(new_meta)
